@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Phoenix Intelligence Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#x1F525;</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', 'Fira Code', monospace; background: #0a0e1a; color: #c8d6e5; line-height: 1.5; }
@@ -29,9 +32,27 @@
         .pulse { animation: pulse 2s ease-in-out infinite; }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
+        /* Navigation tabs */
+        .nav-tabs {
+            display: flex; gap: 0; background: #0f172a; border-bottom: 1px solid #1e293b;
+            padding: 0 1.5rem; overflow-x: auto;
+        }
+        .nav-tab {
+            padding: 0.6rem 1.2rem; font-size: 0.78rem; font-weight: 500;
+            color: #64748b; cursor: pointer; border-bottom: 2px solid transparent;
+            white-space: nowrap; transition: all 0.2s;
+        }
+        .nav-tab:hover { color: #94a3b8; }
+        .nav-tab.active { color: #f59e0b; border-bottom-color: #f59e0b; }
+
+        /* Sections */
+        .section { display: none; }
+        .section.active { display: block; }
+
         /* Grid layout */
         .container { max-width: 1600px; margin: 0 auto; padding: 1rem; }
         .grid { display: grid; gap: 1rem; }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
         .grid-3 { grid-template-columns: repeat(3, 1fr); }
         .grid-2 { grid-template-columns: repeat(2, 1fr); }
 
@@ -54,6 +75,7 @@
         .card-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; background: #1e293b; color: #64748b; }
         .card-error { color: #64748b; font-style: italic; font-size: 0.85rem; padding: 1rem 0; }
         .span-2 { grid-column: span 2; }
+        .span-3 { grid-column: span 3; }
 
         /* Tables */
         table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
@@ -99,6 +121,23 @@
         .sev-high { color: #f59e0b; }
         .sev-medium { color: #6b7280; }
 
+        /* Risk levels */
+        .risk-extreme { color: #ef4444; font-weight: 700; }
+        .risk-high { color: #f97316; font-weight: 600; }
+        .risk-elevated { color: #f59e0b; }
+        .risk-moderate { color: #64748b; }
+        .risk-low { color: #22c55e; }
+
+        /* Map */
+        #geoMap { height: 400px; border-radius: 8px; border: 1px solid #1e293b; }
+        .leaflet-container { background: #0a0e1a; }
+        .map-legend { position: absolute; bottom: 10px; right: 10px; background: rgba(15,23,42,0.9); padding: 8px 12px; border-radius: 6px; font-size: 0.75rem; z-index: 1000; border: 1px solid #1e293b; }
+        .map-legend div { margin: 2px 0; }
+        .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+        /* Charts */
+        .chart-container { position: relative; height: 220px; }
+
         /* Loading overlay */
         #loading {
             position: fixed; inset: 0; z-index: 200;
@@ -110,8 +149,8 @@
         @keyframes spin { to { transform: rotate(360deg); } }
 
         /* Responsive */
-        @media (max-width: 1200px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
-        @media (max-width: 800px) { .grid-3, .grid-2 { grid-template-columns: 1fr; } .span-2 { grid-column: span 1; } }
+        @media (max-width: 1200px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } .grid-3 { grid-template-columns: repeat(2, 1fr); } .span-3 { grid-column: span 2; } }
+        @media (max-width: 800px) { .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; } .span-2, .span-3 { grid-column: span 1; } }
     </style>
 </head>
 <body>
@@ -124,180 +163,277 @@
     <div>
         <span class="status-dot dot-green pulse" id="connDot"></span>
         <span id="connLabel">Connecting...</span>
-        &nbsp;&middot;&nbsp;
-        <span id="sourceHealth">--</span>
-        &nbsp;&middot;&nbsp;
-        <span id="lastUpdate">--</span>
+        &middot; <span id="sourceHealth">--</span>
+        &middot; <span id="lastUpdate">--</span>
+        &middot; <span id="feedCount">--</span>
     </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-tabs">
+    <div class="nav-tab active" data-tab="overview">Overview</div>
+    <div class="nav-tab" data-tab="markets">Markets</div>
+    <div class="nav-tab" data-tab="security">Security</div>
+    <div class="nav-tab" data-tab="conflict">Conflict &amp; Humanitarian</div>
+    <div class="nav-tab" data-tab="natural">Natural &amp; Climate</div>
+    <div class="nav-tab" data-tab="geomap">Geospatial Map</div>
+    <div class="nav-tab" data-tab="charts">Trend Charts</div>
 </div>
 
 <div class="container">
 
-    <!-- Row 1: Market Overview -->
+<!-- ======================= OVERVIEW TAB ======================= -->
+<div class="section active" id="tab-overview">
+    <div class="stat-row" style="margin-top:1rem;" id="overviewStats"></div>
     <div class="grid grid-3" style="margin-top:1rem;">
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Equity Indices</span>
-                <span class="card-badge" id="equityBadge">--</span>
-            </div>
-            <div class="scroll-box">
-                <table><thead><tr><th>Symbol</th><th>Price</th><th>Chg</th><th>%</th></tr></thead><tbody id="equityBody"></tbody></table>
-            </div>
+            <div class="card-header"><span class="card-title">Equity Indices</span><span class="card-badge" id="equityBadge">--</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Symbol</th><th>Price</th><th>Chg</th><th>%</th></tr></thead><tbody id="equityBody"></tbody></table></div>
         </div>
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Cryptocurrency</span>
-                <span class="card-badge" id="cryptoBadge">--</span>
-            </div>
-            <div class="scroll-box">
-                <table><thead><tr><th>Coin</th><th>Price</th><th>24h</th><th>MCap</th></tr></thead><tbody id="cryptoBody"></tbody></table>
-            </div>
+            <div class="card-header"><span class="card-title">Cyber Threats</span><span class="card-badge" id="cyberBadge">--</span></div>
+            <div id="cyberStats" class="stat-row" style="margin-bottom:0.75rem;"></div>
+            <div class="scroll-box"><table><thead><tr><th>Threat</th><th>Type</th><th>Severity</th></tr></thead><tbody id="cyberBody"></tbody></table></div>
         </div>
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Macro Signals</span>
-                <span class="card-badge">Live</span>
-            </div>
-            <div id="macroContent" class="stat-row" style="flex-wrap:wrap;"></div>
+            <div class="card-header"><span class="card-title">Risk Scores</span><span class="card-badge" id="riskBadge">--</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Country</th><th>Score</th><th>Level</th><th>Events</th></tr></thead><tbody id="riskBody"></tbody></table></div>
         </div>
     </div>
+    <div class="grid grid-3" style="margin-top:1rem;">
+        <div class="card">
+            <div class="card-header"><span class="card-title">Armed Conflict (ACLED)</span><span class="card-badge" id="acledBadge">--</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Event</th><th>Country</th><th>Fatalities</th><th>Date</th></tr></thead><tbody id="acledBody"></tbody></table></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Displacement</span></div>
+            <div id="displacementStats" class="stat-row"></div>
+            <div class="scroll-box" style="margin-top:0.75rem;"><table><thead><tr><th>Country</th><th>Refugees</th><th>IDPs</th></tr></thead><tbody id="displacementBody"></tbody></table></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Signal Convergence</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Region</th><th>Score</th><th>Signals</th></tr></thead><tbody id="convergenceBody"></tbody></table></div>
+        </div>
+    </div>
+    <div class="grid grid-3" style="margin-top:1rem;">
+        <div class="card">
+            <div class="card-header"><span class="card-title">Natural Events</span><span class="card-badge" id="naturalBadge">--</span></div>
+            <div id="naturalStats" class="stat-row" style="margin-bottom:0.75rem;"></div>
+            <div class="scroll-box"><table><thead><tr><th>Mag</th><th>Location</th><th>Depth</th><th>Time</th></tr></thead><tbody id="quakeBody"></tbody></table></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Intelligence News</span><span class="card-badge" id="newsBadge">--</span></div>
+            <div id="trendingKeywords" style="margin-bottom:0.75rem;"></div>
+            <div class="scroll-box"><table><thead><tr><th>Headline</th><th>Source</th></tr></thead><tbody id="newsBody"></tbody></table></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Prediction Markets</span><span class="card-badge" id="predBadge">--</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Market</th><th>Prob</th><th>Vol</th></tr></thead><tbody id="predBody"></tbody></table></div>
+        </div>
+    </div>
+</div>
 
-    <!-- Row 2: Sector Heatmap + Energy -->
+<!-- ======================= MARKETS TAB ======================= -->
+<div class="section" id="tab-markets">
+    <div class="grid grid-3" style="margin-top:1rem;">
+        <div class="card">
+            <div class="card-header"><span class="card-title">Equity Indices</span><span class="card-badge" id="equityBadge2">--</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Symbol</th><th>Price</th><th>Chg</th><th>%</th></tr></thead><tbody id="equityBody2"></tbody></table></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Cryptocurrency</span><span class="card-badge" id="cryptoBadge">--</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Coin</th><th>Price</th><th>24h</th><th>MCap</th></tr></thead><tbody id="cryptoBody"></tbody></table></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Stablecoin Peg Status</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Coin</th><th>Price</th><th>Deviation</th><th>Status</th></tr></thead><tbody id="stablecoinBody"></tbody></table></div>
+        </div>
+    </div>
     <div class="grid grid-3" style="margin-top:1rem;">
         <div class="card span-2">
-            <div class="card-header">
-                <span class="card-title">Sector Performance</span>
-            </div>
+            <div class="card-header"><span class="card-title">Sector Performance</span></div>
             <div class="heatmap" id="sectorHeatmap"></div>
         </div>
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Energy Prices</span>
-            </div>
-            <div id="energyContent"></div>
+            <div class="card-header"><span class="card-title">Macro Signals</span><span class="card-badge">Live</span></div>
+            <div id="macroContent" class="stat-row" style="flex-wrap:wrap;"></div>
         </div>
     </div>
+    <div class="grid grid-2" style="margin-top:1rem;">
+        <div class="card">
+            <div class="card-header"><span class="card-title">Energy Prices</span></div>
+            <div id="energyContent"></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">ETF Flows</span><span class="card-badge" id="etfBadge">--</span></div>
+            <div class="scroll-box"><table><thead><tr><th>ETF</th><th>Price</th><th>Chg%</th><th>Volume</th></tr></thead><tbody id="etfBody"></tbody></table></div>
+        </div>
+    </div>
+</div>
 
-    <!-- Row 3: Threats + Military + Infra -->
+<!-- ======================= SECURITY TAB ======================= -->
+<div class="section" id="tab-security">
     <div class="grid grid-3" style="margin-top:1rem;">
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Cyber Threats</span>
-                <span class="card-badge" id="cyberBadge">--</span>
-            </div>
-            <div id="cyberStats" class="stat-row" style="margin-bottom:0.75rem;"></div>
-            <div class="scroll-box">
-                <table><thead><tr><th>Threat</th><th>Type</th><th>Severity</th></tr></thead><tbody id="cyberBody"></tbody></table>
-            </div>
+            <div class="card-header"><span class="card-title">Cyber Threats</span><span class="card-badge" id="cyberBadge2">--</span></div>
+            <div id="cyberStats2" class="stat-row" style="margin-bottom:0.75rem;"></div>
+            <div class="scroll-box"><table><thead><tr><th>Threat</th><th>Type</th><th>Severity</th></tr></thead><tbody id="cyberBody2"></tbody></table></div>
         </div>
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Military Activity</span>
-                <span class="card-badge" id="milBadge">--</span>
-            </div>
+            <div class="card-header"><span class="card-title">Military Activity</span><span class="card-badge" id="milBadge">--</span></div>
             <div id="milStats" class="stat-row" style="margin-bottom:0.75rem;"></div>
-            <div class="scroll-box">
-                <table><thead><tr><th>Callsign</th><th>Type</th><th>Alt</th><th>Origin</th></tr></thead><tbody id="milBody"></tbody></table>
-            </div>
+            <div class="scroll-box"><table><thead><tr><th>Callsign</th><th>Type</th><th>Alt</th><th>Origin</th></tr></thead><tbody id="milBody"></tbody></table></div>
         </div>
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Infrastructure</span>
-            </div>
+            <div class="card-header"><span class="card-title">Infrastructure</span></div>
             <div id="infraStats" class="stat-row" style="margin-bottom:0.75rem;"></div>
             <div class="scroll-box" id="infraContent"></div>
         </div>
     </div>
-
-    <!-- Row 4: Natural + News + Predictions -->
     <div class="grid grid-3" style="margin-top:1rem;">
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Natural Events</span>
-                <span class="card-badge" id="naturalBadge">--</span>
-            </div>
-            <div id="naturalStats" class="stat-row" style="margin-bottom:0.75rem;"></div>
-            <div class="scroll-box">
-                <table><thead><tr><th>Mag</th><th>Location</th><th>Depth</th><th>Time</th></tr></thead><tbody id="quakeBody"></tbody></table>
-            </div>
+            <div class="card-header"><span class="card-title">Airport Delays</span><span class="card-badge" id="aviationBadge">--</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Airport</th><th>Reason</th><th>Delay</th></tr></thead><tbody id="aviationBody"></tbody></table></div>
         </div>
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Intelligence News</span>
-                <span class="card-badge" id="newsBadge">--</span>
-            </div>
-            <div id="trendingKeywords" style="margin-bottom:0.75rem;"></div>
-            <div class="scroll-box">
-                <table><thead><tr><th>Headline</th><th>Source</th></tr></thead><tbody id="newsBody"></tbody></table>
-            </div>
+            <div class="card-header"><span class="card-title">Nav Warnings</span><span class="card-badge" id="navBadge">--</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Area</th><th>Warning</th></tr></thead><tbody id="navBody"></tbody></table></div>
         </div>
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Prediction Markets</span>
-                <span class="card-badge" id="predBadge">--</span>
-            </div>
-            <div class="scroll-box">
-                <table><thead><tr><th>Market</th><th>Prob</th><th>Vol</th></tr></thead><tbody id="predBody"></tbody></table>
-            </div>
+            <div class="card-header"><span class="card-title">Risk Scores</span><span class="card-badge" id="riskBadge2">--</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Country</th><th>Score</th><th>Level</th><th>Events</th></tr></thead><tbody id="riskBody2"></tbody></table></div>
         </div>
     </div>
+</div>
 
-    <!-- Row 5: Aviation + Climate + Nav -->
-    <div class="grid grid-3" style="margin-top:1rem;">
+<!-- ======================= CONFLICT & HUMANITARIAN TAB ======================= -->
+<div class="section" id="tab-conflict">
+    <div class="grid grid-2" style="margin-top:1rem;">
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Airport Delays</span>
-                <span class="card-badge" id="aviationBadge">--</span>
-            </div>
-            <div class="scroll-box">
-                <table><thead><tr><th>Airport</th><th>Reason</th><th>Delay</th></tr></thead><tbody id="aviationBody"></tbody></table>
-            </div>
+            <div class="card-header"><span class="card-title">Armed Conflict - ACLED</span><span class="card-badge" id="acledBadge2">--</span></div>
+            <div class="scroll-box" style="max-height:350px;"><table><thead><tr><th>Type</th><th>Country</th><th>Location</th><th>Fatalities</th><th>Date</th></tr></thead><tbody id="acledBody2"></tbody></table></div>
         </div>
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">Climate Anomalies</span>
-            </div>
+            <div class="card-header"><span class="card-title">Armed Conflict - UCDP</span><span class="card-badge" id="ucdpBadge">--</span></div>
+            <div class="scroll-box" style="max-height:350px;"><table><thead><tr><th>Conflict</th><th>Type</th><th>Fatalities</th><th>Location</th></tr></thead><tbody id="ucdpBody"></tbody></table></div>
+        </div>
+    </div>
+    <div class="grid grid-3" style="margin-top:1rem;">
+        <div class="card span-2">
+            <div class="card-header"><span class="card-title">Global Displacement (UNHCR)</span></div>
+            <div id="displacementStats2" class="stat-row" style="margin-bottom:0.75rem;"></div>
+            <div class="scroll-box"><table><thead><tr><th>Country of Origin</th><th>Refugees</th><th>Asylum Seekers</th><th>IDPs</th><th>Stateless</th></tr></thead><tbody id="displacementBody2"></tbody></table></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Signal Convergence</span></div>
+            <div class="scroll-box"><table><thead><tr><th>Region</th><th>Score</th><th>Quakes</th></tr></thead><tbody id="convergenceBody2"></tbody></table></div>
+        </div>
+    </div>
+</div>
+
+<!-- ======================= NATURAL & CLIMATE TAB ======================= -->
+<div class="section" id="tab-natural">
+    <div class="grid grid-3" style="margin-top:1rem;">
+        <div class="card">
+            <div class="card-header"><span class="card-title">Earthquakes</span><span class="card-badge" id="quakeBadge2">--</span></div>
+            <div class="scroll-box" style="max-height:350px;"><table><thead><tr><th>Mag</th><th>Location</th><th>Depth</th><th>Time</th></tr></thead><tbody id="quakeBody2"></tbody></table></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Wildfires</span><span class="card-badge" id="fireBadge">--</span></div>
+            <div id="fireContent"></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Climate Anomalies</span></div>
             <div class="scroll-box" id="climateContent"></div>
         </div>
+    </div>
+</div>
+
+<!-- ======================= GEOSPATIAL MAP TAB ======================= -->
+<div class="section" id="tab-geomap">
+    <div style="margin-top:1rem;">
         <div class="card">
             <div class="card-header">
-                <span class="card-title">Nav Warnings</span>
-                <span class="card-badge" id="navBadge">--</span>
+                <span class="card-title">Geospatial Intelligence</span>
+                <span>
+                    <label style="font-size:0.75rem;margin-right:8px;"><input type="checkbox" id="mapQuakes" checked> Quakes</label>
+                    <label style="font-size:0.75rem;margin-right:8px;"><input type="checkbox" id="mapFlights" checked> Military</label>
+                    <label style="font-size:0.75rem;margin-right:8px;"><input type="checkbox" id="mapConflict" checked> Conflict</label>
+                    <label style="font-size:0.75rem;"><input type="checkbox" id="mapConvergence" checked> Convergence</label>
+                </span>
             </div>
-            <div class="scroll-box">
-                <table><thead><tr><th>Area</th><th>Warning</th></tr></thead><tbody id="navBody"></tbody></table>
+            <div id="geoMap"></div>
+            <div class="map-legend">
+                <div><span class="legend-dot" style="background:#ef4444;"></span>Earthquakes</div>
+                <div><span class="legend-dot" style="background:#60a5fa;"></span>Military Flights</div>
+                <div><span class="legend-dot" style="background:#f59e0b;"></span>Conflict Events</div>
+                <div><span class="legend-dot" style="background:#a78bfa;"></span>Signal Convergence</div>
             </div>
         </div>
     </div>
+</div>
+
+<!-- ======================= TREND CHARTS TAB ======================= -->
+<div class="section" id="tab-charts">
+    <div class="grid grid-2" style="margin-top:1rem;">
+        <div class="card">
+            <div class="card-header"><span class="card-title">Earthquake Activity (Recent Updates)</span></div>
+            <div class="chart-container"><canvas id="chartQuakes"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Cyber Threat Volume</span></div>
+            <div class="chart-container"><canvas id="chartCyber"></canvas></div>
+        </div>
+    </div>
+    <div class="grid grid-2" style="margin-top:1rem;">
+        <div class="card">
+            <div class="card-header"><span class="card-title">Military Aircraft Tracked</span></div>
+            <div class="chart-container"><canvas id="chartMilitary"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Conflict Events (ACLED)</span></div>
+            <div class="chart-container"><canvas id="chartConflict"></canvas></div>
+        </div>
+    </div>
+</div>
 
 </div>
 
 <script>
 // ========================================================================
-// Phoenix Intelligence Dashboard — Live Update Engine
-// All DOM updates use DOMPurify.sanitize() for XSS protection.
+// Phoenix Intelligence Dashboard v2 - Full-spectrum live intelligence
+// NOTE: All innerHTML assignments use DOMPurify.sanitize() for XSS safety.
 // ========================================================================
 
-const $ = (sel) => document.querySelector(sel);
-const safe = (html) => DOMPurify.sanitize(html, {ALLOWED_TAGS: ['tr','td','th','table','thead','tbody','a','span','div','br'], ALLOWED_ATTR: ['class','style','href','target']});
+var $ = function(sel) { return document.querySelector(sel); };
+var $$ = function(sel) { return document.querySelectorAll(sel); };
+var safe = function(html) { return DOMPurify.sanitize(html, {ALLOWED_TAGS: ['tr','td','th','table','thead','tbody','a','span','div','br','canvas'], ALLOWED_ATTR: ['class','style','href','target','id']}); };
 
-// Formatters
 function fmtNum(n, dec) { dec = dec != null ? dec : 2; return n == null ? '\u2014' : Number(n).toLocaleString(undefined, {minimumFractionDigits: dec, maximumFractionDigits: dec}); }
 function fmtPct(n) { return n == null ? '\u2014' : (n >= 0 ? '+' : '') + fmtNum(n); }
 function fmtBig(n) { if (n == null) return '\u2014'; if (Math.abs(n) >= 1e12) return '$' + (n/1e12).toFixed(1) + 'T'; if (Math.abs(n) >= 1e9) return '$' + (n/1e9).toFixed(1) + 'B'; if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'; return '$' + fmtNum(n, 0); }
+function fmtBigPlain(n) { if (n == null) return '\u2014'; if (Math.abs(n) >= 1e9) return (n/1e9).toFixed(1) + 'B'; if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(1) + 'M'; if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(1) + 'K'; return String(n); }
 function cls(n) { return n == null ? '' : n >= 0 ? 'up' : 'down'; }
 function sevCls(s) { s = (s||'').toLowerCase(); return s === 'critical' ? 'sev-critical' : s === 'high' ? 'sev-high' : 'sev-medium'; }
-function ago(ts) {
-    if (!ts) return '\u2014';
-    var d = new Date(ts), s = Math.floor((Date.now() - d.getTime()) / 1000);
-    if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s/60) + 'm ago';
-    if (s < 86400) return Math.floor(s/3600) + 'h ago'; return Math.floor(s/86400) + 'd ago';
-}
+function riskCls(s) { s = (s||'').toLowerCase(); if (s === 'extreme' || s === 'critical') return 'risk-extreme'; if (s === 'high') return 'risk-high'; if (s === 'elevated') return 'risk-elevated'; if (s === 'moderate') return 'risk-moderate'; return 'risk-low'; }
+function ago(ts) { if (!ts) return '\u2014'; var d = new Date(ts), s = Math.floor((Date.now() - d.getTime()) / 1000); if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s/60) + 'm ago'; if (s < 86400) return Math.floor(s/3600) + 'h ago'; return Math.floor(s/86400) + 'd ago'; }
 function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function trunc(s, n) { n = n || 50; s = s || ''; return s.length > n ? s.slice(0, n) + '...' : s; }
 
+// Tab navigation
+$$('.nav-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+        $$('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
+        $$('.section').forEach(function(s) { s.classList.remove('active'); });
+        tab.classList.add('active');
+        var target = document.getElementById('tab-' + tab.dataset.tab);
+        if (target) target.classList.add('active');
+        if (tab.dataset.tab === 'geomap' && !mapInitialized) initMap();
+    });
+});
+
 // ========================================================================
-// Update functions — all use safe() for innerHTML
+// Update functions - all use safe() for innerHTML (DOMPurify XSS protection)
 // ========================================================================
 
 function updateEquity(data) {
@@ -311,6 +447,7 @@ function updateEquity(data) {
         return '<tr><td class="bright">' + esc(q.symbol || '?') + '</td><td>' + fmtNum(price) + '</td><td class="' + cls(chg) + '">' + fmtPct(chg) + '</td><td class="' + cls(pct) + '">' + fmtPct(pct) + '%</td></tr>';
     }).join('');
     $('#equityBody').innerHTML = safe(rows);
+    if ($('#equityBody2')) { $('#equityBadge2').textContent = quotes.length + ' symbols'; $('#equityBody2').innerHTML = safe(rows); }
 }
 
 function updateCrypto(data) {
@@ -324,6 +461,17 @@ function updateCrypto(data) {
         return '<tr><td class="bright">' + esc((c.symbol || c.id || '?').toUpperCase()) + '</td><td>$' + fmtNum(price) + '</td><td class="' + cls(chg) + '">' + fmtPct(chg) + '%</td><td class="muted">' + fmtBig(mcap) + '</td></tr>';
     }).join('');
     $('#cryptoBody').innerHTML = safe(rows);
+}
+
+function updateStablecoins(data) {
+    if (!data || data.error) { $('#stablecoinBody').innerHTML = safe('<tr><td colspan="4" class="card-error">Unavailable</td></tr>'); return; }
+    var coins = data.stablecoins || data.data || (Array.isArray(data) ? data : []);
+    var rows = coins.map(function(c) {
+        var depegged = c.is_depegged;
+        var devPct = c.peg_deviation_pct || 0;
+        return '<tr><td class="bright">' + esc((c.id || '?').toUpperCase()) + '</td><td>$' + fmtNum(c.price, 4) + '</td><td class="' + (devPct > 0.5 ? 'warn' : 'muted') + '">' + fmtNum(devPct, 3) + '%</td><td class="' + (depegged ? 'sev-critical' : 'up') + '">' + (depegged ? 'DEPEGGED' : 'Stable') + '</td></tr>';
+    }).join('');
+    $('#stablecoinBody').innerHTML = safe(rows);
 }
 
 function updateMacro(data) {
@@ -349,14 +497,10 @@ function updateSectorHeatmap(data) {
     if (!data || data.error) { $('#sectorHeatmap').innerHTML = safe('<div class="card-error">Unavailable</div>'); return; }
     var sectors = data.sectors || data.data || (Array.isArray(data) ? data : []);
     var html = sectors.map(function(s) {
-        var pct = s.change_pct || 0;
-        var bg, fg;
-        if (pct >= 2) { bg = '#166534'; fg = '#86efac'; }
-        else if (pct >= 0.5) { bg = '#14532d'; fg = '#86efac'; }
-        else if (pct >= 0) { bg = '#1a2e1a'; fg = '#86efac'; }
-        else if (pct >= -0.5) { bg = '#2e1a1a'; fg = '#fca5a5'; }
-        else if (pct >= -2) { bg = '#7f1d1d'; fg = '#fca5a5'; }
-        else { bg = '#991b1b'; fg = '#fca5a5'; }
+        var pct = s.change_pct || 0; var bg, fg;
+        if (pct >= 2) { bg = '#166534'; fg = '#86efac'; } else if (pct >= 0.5) { bg = '#14532d'; fg = '#86efac'; }
+        else if (pct >= 0) { bg = '#1a2e1a'; fg = '#86efac'; } else if (pct >= -0.5) { bg = '#2e1a1a'; fg = '#fca5a5'; }
+        else if (pct >= -2) { bg = '#7f1d1d'; fg = '#fca5a5'; } else { bg = '#991b1b'; fg = '#fca5a5'; }
         return '<div class="hm-cell" style="background:' + bg + ';color:' + fg + ';">' + esc(s.symbol || s.name || '?') + '<br>' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%</div>';
     }).join('');
     $('#sectorHeatmap').innerHTML = safe(html);
@@ -377,20 +521,30 @@ function updateEnergy(data) {
     $('#energyContent').innerHTML = safe(html);
 }
 
+function updateETF(data) {
+    if (!data || data.error) { $('#etfBody').innerHTML = safe('<tr><td colspan="4" class="card-error">Unavailable</td></tr>'); return; }
+    var etfs = data.etfs || data.data || (Array.isArray(data) ? data : []);
+    $('#etfBadge').textContent = etfs.length + ' ETFs';
+    var rows = etfs.map(function(e) {
+        return '<tr><td class="bright">' + esc(e.symbol || '?') + '</td><td>' + fmtNum(e.price) + '</td><td class="' + cls(e.change_pct) + '">' + fmtPct(e.change_pct) + '%</td><td class="muted">' + fmtBigPlain(e.volume) + '</td></tr>';
+    }).join('');
+    $('#etfBody').innerHTML = safe(rows);
+}
+
 function updateCyber(data) {
-    if (!data || data.error) { $('#cyberBody').innerHTML = safe('<tr><td colspan="3" class="card-error">Unavailable</td></tr>'); $('#cyberStats').innerHTML = ''; return; }
+    if (!data || data.error) { return; }
     var threats = data.threats || data.data || (Array.isArray(data) ? data : []);
     var bySev = data.by_severity || {};
-    $('#cyberBadge').textContent = threats.length + ' IOCs';
-    $('#cyberStats').innerHTML = safe(
-        '<div class="stat-box"><div class="stat-value sev-critical">' + (bySev.critical || 0) + '</div><div class="stat-label">Critical</div></div>' +
-        '<div class="stat-box"><div class="stat-value sev-high">' + (bySev.high || 0) + '</div><div class="stat-label">High</div></div>' +
-        '<div class="stat-box"><div class="stat-value">' + (bySev.medium || 0) + '</div><div class="stat-label">Medium</div></div>'
-    );
+    var badge = threats.length + ' IOCs';
+    var stats = safe('<div class="stat-box"><div class="stat-value sev-critical">' + (bySev.critical || 0) + '</div><div class="stat-label">Critical</div></div><div class="stat-box"><div class="stat-value sev-high">' + (bySev.high || 0) + '</div><div class="stat-label">High</div></div><div class="stat-box"><div class="stat-value">' + (bySev.medium || 0) + '</div><div class="stat-label">Medium</div></div>');
     var rows = threats.slice(0, 20).map(function(t) {
         return '<tr><td>' + esc(trunc(t.indicator || t.url || t.ioc || '?', 40)) + '</td><td class="muted">' + esc(t.threat_type || t.type || t.source || '\u2014') + '</td><td class="' + sevCls(t.severity) + '">' + esc(t.severity || '\u2014') + '</td></tr>';
     }).join('');
-    $('#cyberBody').innerHTML = safe(rows);
+    ['','2'].forEach(function(sfx) {
+        var b = $('#cyberBadge' + sfx); if (b) b.textContent = badge;
+        var s = $('#cyberStats' + sfx); if (s) s.innerHTML = stats;
+        var bd = $('#cyberBody' + sfx); if (bd) bd.innerHTML = safe(rows);
+    });
 }
 
 function updateMilitary(data) {
@@ -407,17 +561,14 @@ function updateMilitary(data) {
 }
 
 function updateInfra(data_outages, data_cables) {
-    var statsHtml = '';
-    var contentHtml = '';
+    var statsHtml = '', contentHtml = '';
     if (data_outages && !data_outages.error) {
         var outages = data_outages.outages || data_outages.data || (Array.isArray(data_outages) ? data_outages : []);
         var count = data_outages.ongoing_count || outages.length;
         statsHtml += '<div class="stat-box"><div class="stat-value ' + (count > 0 ? 'warn' : '') + '">' + count + '</div><div class="stat-label">Outages</div></div>';
         if (outages.length > 0) {
             contentHtml += '<table><thead><tr><th>Location</th><th>Status</th></tr></thead><tbody>';
-            outages.slice(0, 8).forEach(function(o) {
-                contentHtml += '<tr><td>' + esc(o.location || o.asName || '?') + '</td><td class="warn">' + esc(o.status || 'ongoing') + '</td></tr>';
-            });
+            outages.slice(0, 8).forEach(function(o) { contentHtml += '<tr><td>' + esc(o.location || o.asName || '?') + '</td><td class="warn">' + esc(o.status || 'ongoing') + '</td></tr>'; });
             contentHtml += '</tbody></table>';
         }
     }
@@ -446,10 +597,23 @@ function updateNatural(data_quakes, data_fires) {
             return '<tr><td class="' + magClass + ' bright">' + (typeof mag === 'number' ? mag.toFixed(1) : mag) + '</td><td>' + esc(trunc(place, 35)) + '</td><td class="muted">' + (typeof depth === 'number' ? depth.toFixed(0) + 'km' : depth) + '</td><td class="muted">' + ago(time) + '</td></tr>';
         }).join('');
         $('#quakeBody').innerHTML = safe(rows);
+        if ($('#quakeBody2')) { $('#quakeBadge2').textContent = quakes.length + ' quakes'; $('#quakeBody2').innerHTML = safe(rows); }
     }
     if (data_fires && !data_fires.error) {
-        var count = data_fires.fire_count || data_fires.count || 0;
+        var fires = data_fires.fires || data_fires.hotspots || data_fires.data || [];
+        var count = data_fires.fire_count || data_fires.count || (Array.isArray(fires) ? fires.length : 0);
         statsHtml += '<div class="stat-box"><div class="stat-value ' + (count > 100 ? 'warn' : '') + '">' + count + '</div><div class="stat-label">Wildfires</div></div>';
+        if ($('#fireBadge')) $('#fireBadge').textContent = count + ' fires';
+        if ($('#fireContent')) {
+            if (Array.isArray(fires) && fires.length > 0) {
+                var fhtml = '<table><thead><tr><th>Location</th><th>Brightness</th><th>Confidence</th></tr></thead><tbody>';
+                fires.slice(0, 15).forEach(function(f) { fhtml += '<tr><td>' + esc(f.location || (f.latitude ? f.latitude.toFixed(2) + ', ' + f.longitude.toFixed(2) : '?')) + '</td><td class="warn">' + (f.brightness || f.bright_ti4 || '\u2014') + '</td><td class="muted">' + esc(f.confidence || '\u2014') + '</td></tr>'; });
+                fhtml += '</tbody></table>';
+                $('#fireContent').innerHTML = safe(fhtml);
+            } else {
+                $('#fireContent').innerHTML = safe('<div class="stat-row"><div class="stat-box"><div class="stat-value ' + (count > 100 ? 'warn' : '') + '">' + count + '</div><div class="stat-label">Active Fires</div></div></div>');
+            }
+        }
     }
     $('#naturalStats').innerHTML = safe(statsHtml || '<div class="card-error">Unavailable</div>');
 }
@@ -529,70 +693,269 @@ function updateNavWarnings(data) {
     $('#navBody').innerHTML = safe(rows);
 }
 
+// New: Conflict, Displacement, Risk, Signal Convergence
+
+function updateACLED(data) {
+    if (!data || data.error) { return; }
+    var events = data.events || data.data || (Array.isArray(data) ? data : []);
+    var badge = (data.count || events.length) + ' events';
+    var rows1 = events.slice(0, 10).map(function(e) {
+        var fat = e.fatalities || 0;
+        return '<tr><td>' + esc(trunc(e.event_type || e.type || '?', 20)) + '</td><td class="muted">' + esc(e.country || '?') + '</td><td class="' + (fat > 10 ? 'sev-critical' : fat > 0 ? 'warn' : 'muted') + '">' + fat + '</td><td class="muted">' + esc(e.event_date || '\u2014') + '</td></tr>';
+    }).join('');
+    if ($('#acledBadge')) $('#acledBadge').textContent = badge;
+    if ($('#acledBody')) $('#acledBody').innerHTML = safe(rows1);
+    var rows2 = events.slice(0, 25).map(function(e) {
+        var fat = e.fatalities || 0;
+        return '<tr><td>' + esc(trunc(e.event_type || e.type || '?', 25)) + '</td><td class="muted">' + esc(e.country || '?') + '</td><td>' + esc(trunc(e.location || e.admin1 || '?', 25)) + '</td><td class="' + (fat > 10 ? 'sev-critical' : fat > 0 ? 'warn' : 'muted') + '">' + fat + '</td><td class="muted">' + esc(e.event_date || '\u2014') + '</td></tr>';
+    }).join('');
+    if ($('#acledBadge2')) $('#acledBadge2').textContent = badge;
+    if ($('#acledBody2')) $('#acledBody2').innerHTML = safe(rows2);
+}
+
+function updateUCDP(data) {
+    if (!data || data.error) { $('#ucdpBody').innerHTML = safe('<tr><td colspan="4" class="card-error">Unavailable</td></tr>'); return; }
+    var events = data.events || data.data || (Array.isArray(data) ? data : []);
+    $('#ucdpBadge').textContent = (data.count || events.length) + ' events';
+    var rows = events.slice(0, 25).map(function(e) {
+        var best = e.best || e.best_fatality_estimate || 0;
+        return '<tr><td>' + esc(trunc(e.dyad_name || e.side_a || '?', 30)) + '</td><td class="muted">' + esc(e.type_of_violence || '\u2014') + '</td><td class="' + (best > 10 ? 'sev-critical' : best > 0 ? 'warn' : 'muted') + '">' + best + '</td><td class="muted">' + esc(trunc(e.where_description || e.country || '?', 25)) + '</td></tr>';
+    }).join('');
+    $('#ucdpBody').innerHTML = safe(rows);
+}
+
+function updateDisplacement(data) {
+    if (!data || data.error) { return; }
+    var totals = data.global_totals || {};
+    var origins = data.by_origin || data.data || (Array.isArray(data) ? data : []);
+    var statsHtml = '<div class="stat-box"><div class="stat-value">' + fmtBigPlain(totals.total_refugees || 0) + '</div><div class="stat-label">Refugees</div></div><div class="stat-box"><div class="stat-value">' + fmtBigPlain(totals.total_idps || 0) + '</div><div class="stat-label">IDPs</div></div><div class="stat-box"><div class="stat-value">' + fmtBigPlain(totals.total_asylum_seekers || 0) + '</div><div class="stat-label">Asylum Seekers</div></div><div class="stat-box"><div class="stat-value warn">' + fmtBigPlain(totals.grand_total || 0) + '</div><div class="stat-label">Total Displaced</div></div>';
+    if ($('#displacementStats')) $('#displacementStats').innerHTML = safe(statsHtml);
+    var rows1 = (Array.isArray(origins) ? origins : []).slice(0, 10).map(function(c) {
+        return '<tr><td class="bright">' + esc(c.country_name || c.country || '?') + '</td><td>' + fmtBigPlain(c.refugees || 0) + '</td><td>' + fmtBigPlain(c.idps || 0) + '</td></tr>';
+    }).join('');
+    if ($('#displacementBody')) $('#displacementBody').innerHTML = safe(rows1);
+    if ($('#displacementStats2')) $('#displacementStats2').innerHTML = safe(statsHtml);
+    var rows2 = (Array.isArray(origins) ? origins : []).slice(0, 20).map(function(c) {
+        return '<tr><td class="bright">' + esc(c.country_name || c.country || '?') + '</td><td>' + fmtBigPlain(c.refugees || 0) + '</td><td>' + fmtBigPlain(c.asylum_seekers || 0) + '</td><td>' + fmtBigPlain(c.idps || 0) + '</td><td class="muted">' + fmtBigPlain(c.stateless || 0) + '</td></tr>';
+    }).join('');
+    if ($('#displacementBody2')) $('#displacementBody2').innerHTML = safe(rows2);
+}
+
+function updateRiskScores(data) {
+    if (!data || data.error) { return; }
+    var countries = data.countries || data.data || (Array.isArray(data) ? data : []);
+    var badge = (data.count || countries.length) + ' countries';
+    var mkRows = function(limit) {
+        return countries.slice(0, limit).map(function(c) {
+            return '<tr><td class="bright">' + esc(c.country || c.country_name || '?') + '</td><td>' + fmtNum(c.risk_score, 1) + '</td><td class="' + riskCls(c.risk_level) + '">' + esc(c.risk_level || '\u2014') + '</td><td class="muted">' + (c.events_30d || '\u2014') + '</td></tr>';
+        }).join('');
+    };
+    ['','2'].forEach(function(sfx) {
+        var b = $('#riskBadge' + sfx); if (b) b.textContent = badge;
+        var bd = $('#riskBody' + sfx); if (bd) bd.innerHTML = safe(mkRows(sfx === '' ? 10 : 15));
+    });
+}
+
+function updateSignalConvergence(data) {
+    if (!data || data.error) { return; }
+    var hotspots = data.hotspots || data.data || (Array.isArray(data) ? data : []);
+    var mkRows = function(limit) {
+        return hotspots.slice(0, limit).map(function(h) {
+            var score = h.convergence_score || 0;
+            var signals = h.signals || {};
+            var sigStr = Object.entries(signals).map(function(e) { return e[0] + ':' + e[1]; }).join(', ');
+            return '<tr><td class="bright">' + esc(h.name || '?') + '</td><td class="' + (score >= 7 ? 'sev-critical' : score >= 4 ? 'warn' : 'muted') + '">' + fmtNum(score, 1) + '</td><td class="muted">' + esc(sigStr || '\u2014') + '</td></tr>';
+        }).join('');
+    };
+    if ($('#convergenceBody')) $('#convergenceBody').innerHTML = safe(mkRows(8));
+    if ($('#convergenceBody2')) $('#convergenceBody2').innerHTML = safe(mkRows(15));
+}
+
+// Overview summary stats
+function updateOverviewStats(data) {
+    var quakeCount = 0, cyberCount = 0, conflictCount = 0, fireCount = 0, displacedTotal = 0, milCount = 0;
+    if (data.earthquakes && !data.earthquakes.error) { quakeCount = (data.earthquakes.earthquakes || data.earthquakes.features || []).length; }
+    if (data.cyber_threats && !data.cyber_threats.error) { cyberCount = (data.cyber_threats.threats || []).length; }
+    if (data.acled_events && !data.acled_events.error) { conflictCount = data.acled_events.count || 0; }
+    if (data.wildfires && !data.wildfires.error) { fireCount = data.wildfires.fire_count || data.wildfires.count || 0; }
+    if (data.displacement && !data.displacement.error && data.displacement.global_totals) { displacedTotal = data.displacement.global_totals.grand_total || 0; }
+    if (data.military_flights && !data.military_flights.error) { milCount = data.military_flights.total_military_aircraft || 0; }
+    var html = '<div class="stat-box"><div class="stat-value">' + quakeCount + '</div><div class="stat-label">Earthquakes</div></div>' +
+        '<div class="stat-box"><div class="stat-value">' + cyberCount + '</div><div class="stat-label">Cyber IOCs</div></div>' +
+        '<div class="stat-box"><div class="stat-value ' + (conflictCount > 100 ? 'warn' : '') + '">' + conflictCount + '</div><div class="stat-label">Conflict Events</div></div>' +
+        '<div class="stat-box"><div class="stat-value ' + (fireCount > 100 ? 'warn' : '') + '">' + fireCount + '</div><div class="stat-label">Wildfires</div></div>' +
+        '<div class="stat-box"><div class="stat-value">' + milCount + '</div><div class="stat-label">Mil. Aircraft</div></div>' +
+        '<div class="stat-box"><div class="stat-value warn">' + fmtBigPlain(displacedTotal) + '</div><div class="stat-label">Displaced</div></div>';
+    $('#overviewStats').innerHTML = safe(html);
+}
+
+// ========================================================================
+// Geospatial Map (Leaflet) - initialized on tab click
+// ========================================================================
+
+var map = null, mapInitialized = false;
+var mapLayers = { quakes: null, flights: null, conflict: null, convergence: null };
+var latestData = null;
+
+function initMap() {
+    if (mapInitialized) return;
+    mapInitialized = true;
+    map = L.map('geoMap', { zoomControl: true, attributionControl: false }).setView([20, 0], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(map);
+    mapLayers.quakes = L.layerGroup().addTo(map);
+    mapLayers.flights = L.layerGroup().addTo(map);
+    mapLayers.conflict = L.layerGroup().addTo(map);
+    mapLayers.convergence = L.layerGroup().addTo(map);
+    ['mapQuakes','mapFlights','mapConflict','mapConvergence'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('change', function() { updateMapLayers(); });
+    });
+    if (latestData) updateMapLayers();
+}
+
+function updateMapLayers() {
+    if (!map || !latestData) return;
+    var data = latestData;
+    mapLayers.quakes.clearLayers();
+    if (document.getElementById('mapQuakes').checked && data.earthquakes && !data.earthquakes.error) {
+        (data.earthquakes.earthquakes || data.earthquakes.features || []).slice(0, 50).forEach(function(q) {
+            var lat = q.latitude || (q.geometry && q.geometry.coordinates && q.geometry.coordinates[1]);
+            var lon = q.longitude || (q.geometry && q.geometry.coordinates && q.geometry.coordinates[0]);
+            var mag = q.magnitude || (q.properties && q.properties.mag) || 1;
+            if (lat != null && lon != null) {
+                L.circleMarker([lat, lon], { radius: Math.max(3, mag * 2.5), color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.6, weight: 1
+                }).bindPopup('<b>M' + (typeof mag === 'number' ? mag.toFixed(1) : mag) + '</b><br>' + (q.place || (q.properties && q.properties.place) || '?')).addTo(mapLayers.quakes);
+            }
+        });
+    }
+    mapLayers.flights.clearLayers();
+    if (document.getElementById('mapFlights').checked && data.military_flights && !data.military_flights.error) {
+        (data.military_flights.flights || data.military_flights.aircraft || []).slice(0, 50).forEach(function(f) {
+            var lat = f.latitude || f.lat, lon = f.longitude || f.lon;
+            if (lat != null && lon != null) {
+                L.circleMarker([lat, lon], { radius: 4, color: '#60a5fa', fillColor: '#60a5fa', fillOpacity: 0.7, weight: 1
+                }).bindPopup('<b>' + (f.callsign || f.icao24 || '?') + '</b><br>' + (f.origin_country || '?')).addTo(mapLayers.flights);
+            }
+        });
+    }
+    mapLayers.conflict.clearLayers();
+    if (document.getElementById('mapConflict').checked && data.acled_events && !data.acled_events.error) {
+        (data.acled_events.events || []).slice(0, 50).forEach(function(e) {
+            var lat = e.latitude || e.lat, lon = e.longitude || e.lon;
+            if (lat != null && lon != null) {
+                var fat = e.fatalities || 0;
+                L.circleMarker([Number(lat), Number(lon)], { radius: Math.max(3, Math.min(10, fat / 2 + 3)), color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.5, weight: 1
+                }).bindPopup('<b>' + (e.event_type || '?') + '</b><br>' + (e.country || '') + ' - ' + fat + ' fatalities').addTo(mapLayers.conflict);
+            }
+        });
+    }
+    mapLayers.convergence.clearLayers();
+    if (document.getElementById('mapConvergence').checked && data.signal_convergence && !data.signal_convergence.error) {
+        (data.signal_convergence.hotspots || []).forEach(function(h) {
+            if (h.lat != null && h.lon != null) {
+                var score = h.convergence_score || 0;
+                L.circle([h.lat, h.lon], { radius: 200000 + score * 50000, color: '#a78bfa', fillColor: '#a78bfa', fillOpacity: 0.15, weight: 2
+                }).bindPopup('<b>' + (h.name || '?') + '</b><br>Score: ' + score.toFixed(1)).addTo(mapLayers.convergence);
+            }
+        });
+    }
+}
+
+// ========================================================================
+// Trend Charts (Chart.js) - rolling time series from SSE updates
+// ========================================================================
+
+var MAX_CHART_POINTS = 30;
+var chartData = { labels: [], quakes: [], cyber: [], military: [], conflict: [] };
+var charts = {};
+
+function initCharts() {
+    var commonOpts = {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+            x: { display: true, ticks: { color: '#4a5568', maxRotation: 0, maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#1e293b' } },
+            y: { display: true, ticks: { color: '#4a5568', font: { size: 10 } }, grid: { color: '#1e293b' }, beginAtZero: true }
+        },
+        plugins: { legend: { display: false } }, animation: { duration: 300 }
+    };
+    charts.quakes = new Chart($('#chartQuakes'), { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true, tension: 0.3, pointRadius: 2 }] }, options: commonOpts });
+    charts.cyber = new Chart($('#chartCyber'), { type: 'bar', data: { labels: [], datasets: [{ data: [], backgroundColor: 'rgba(245,158,11,0.6)', borderColor: '#f59e0b', borderWidth: 1 }] }, options: commonOpts });
+    charts.military = new Chart($('#chartMilitary'), { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.1)', fill: true, tension: 0.3, pointRadius: 2 }] }, options: commonOpts });
+    charts.conflict = new Chart($('#chartConflict'), { type: 'bar', data: { labels: [], datasets: [{ data: [], backgroundColor: 'rgba(167,139,250,0.6)', borderColor: '#a78bfa', borderWidth: 1 }] }, options: commonOpts });
+}
+
+function updateCharts(data) {
+    var now = new Date();
+    var label = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    chartData.labels.push(label);
+    var qC = 0, cC = 0, mC = 0, aC = 0;
+    if (data.earthquakes && !data.earthquakes.error) { qC = (data.earthquakes.earthquakes || data.earthquakes.features || []).length; }
+    if (data.cyber_threats && !data.cyber_threats.error) { cC = (data.cyber_threats.threats || []).length; }
+    if (data.military_flights && !data.military_flights.error) { mC = data.military_flights.total_military_aircraft || 0; }
+    if (data.acled_events && !data.acled_events.error) { aC = data.acled_events.count || 0; }
+    chartData.quakes.push(qC); chartData.cyber.push(cC); chartData.military.push(mC); chartData.conflict.push(aC);
+    if (chartData.labels.length > MAX_CHART_POINTS) { chartData.labels.shift(); chartData.quakes.shift(); chartData.cyber.shift(); chartData.military.shift(); chartData.conflict.shift(); }
+    ['quakes','cyber','military','conflict'].forEach(function(k) {
+        if (charts[k]) { charts[k].data.labels = chartData.labels.slice(); charts[k].data.datasets[0].data = chartData[k].slice(); charts[k].update('none'); }
+    });
+}
+
+initCharts();
+
 // ========================================================================
 // Master update
 // ========================================================================
 
 function updateAll(data) {
+    latestData = data;
+    updateOverviewStats(data);
     updateEquity(data.market_quotes);
     updateCrypto(data.crypto_quotes);
+    updateStablecoins(data.stablecoin_status);
     updateMacro(data.macro_signals);
     updateSectorHeatmap(data.sector_heatmap);
     updateEnergy(data.energy_prices);
+    updateETF(data.etf_flows);
     updateCyber(data.cyber_threats);
     updateMilitary(data.military_flights);
     updateInfra(data.internet_outages, data.cable_health);
+    updateAviation(data.airport_delays);
+    updateNavWarnings(data.nav_warnings);
+    updateRiskScores(data.risk_scores);
+    updateACLED(data.acled_events);
+    updateUCDP(data.ucdp_events);
+    updateDisplacement(data.displacement);
+    updateSignalConvergence(data.signal_convergence);
     updateNatural(data.earthquakes, data.wildfires);
+    updateClimate(data.climate_anomalies);
     updateNews(data.news_feed, data.trending_keywords);
     updatePredictions(data.prediction_markets);
-    updateAviation(data.airport_delays);
-    updateClimate(data.climate_anomalies);
-    updateNavWarnings(data.nav_warnings);
-
-    if (data.timestamp) {
-        var t = new Date(data.timestamp);
-        $('#lastUpdate').textContent = t.toLocaleTimeString();
-    }
+    if (mapInitialized) updateMapLayers();
+    updateCharts(data);
+    var feedKeys = Object.keys(data).filter(function(k) { return k !== 'source_health' && k !== 'cache_stats' && k !== 'timestamp'; });
+    var okCount = feedKeys.filter(function(k) { return data[k] && !data[k].error; }).length;
+    $('#feedCount').textContent = okCount + '/' + feedKeys.length + ' feeds';
+    if (data.timestamp) { $('#lastUpdate').textContent = new Date(data.timestamp).toLocaleTimeString(); }
 }
 
 // ========================================================================
-// SSE connection with exponential backoff reconnection
+// SSE connection with exponential backoff
 // ========================================================================
 
 var reconnectDelay = 1000;
-
 function connectSSE() {
     var source = new EventSource('/api/stream');
-
-    source.onopen = function() {
-        $('#connDot').className = 'status-dot dot-green pulse';
-        $('#connLabel').textContent = 'Live';
-        reconnectDelay = 1000;
-    };
-
+    source.onopen = function() { $('#connDot').className = 'status-dot dot-green pulse'; $('#connLabel').textContent = 'Live'; reconnectDelay = 1000; };
     source.onmessage = function(event) {
         try {
             var data = JSON.parse(event.data);
-            if (data.error && !data.market_quotes) {
-                console.warn('Stream error:', data.error);
-                return;
-            }
+            if (data.error && !data.market_quotes) { return; }
             updateAll(data);
             document.getElementById('loading').classList.add('hidden');
-        } catch (e) {
-            console.error('Parse error:', e);
-        }
+        } catch (e) { console.error('Parse error:', e); }
     };
-
-    source.onerror = function() {
-        source.close();
-        $('#connDot').className = 'status-dot dot-red';
-        $('#connLabel').textContent = 'Reconnecting...';
-        setTimeout(connectSSE, reconnectDelay);
-        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
-    };
+    source.onerror = function() { source.close(); $('#connDot').className = 'status-dot dot-red'; $('#connLabel').textContent = 'Reconnecting...'; setTimeout(connectSSE, reconnectDelay); reconnectDelay = Math.min(reconnectDelay * 2, 30000); };
 }
-
 connectSSE();
 </script>
 </body>

@@ -31,6 +31,8 @@ from world_intel_mcp.sources import (
     displacement,
     aviation,
     climate,
+    conflict,
+    intelligence,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,6 +80,13 @@ async def _fetch_overview() -> dict:
         "airport_delays": aviation.fetch_airport_delays(fetcher),
         "climate_anomalies": climate.fetch_climate_anomalies(fetcher),
         "energy_prices": economic.fetch_energy_prices(fetcher),
+        "stablecoin_status": markets.fetch_stablecoin_status(fetcher),
+        "etf_flows": markets.fetch_etf_flows(fetcher),
+        "acled_events": conflict.fetch_acled_events(fetcher),
+        "ucdp_events": conflict.fetch_ucdp_events(fetcher),
+        "displacement": displacement.fetch_displacement_summary(fetcher),
+        "risk_scores": intelligence.fetch_risk_scores(fetcher),
+        "signal_convergence": intelligence.fetch_signal_convergence(fetcher),
     }
 
     gathered = await asyncio.gather(
