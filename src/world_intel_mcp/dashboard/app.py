@@ -33,6 +33,8 @@ from world_intel_mcp.sources import (
     climate,
     conflict,
     intelligence,
+    space_weather,
+    ai_watch,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,6 +89,8 @@ async def _fetch_overview() -> dict:
         "displacement": displacement.fetch_displacement_summary(fetcher),
         "risk_scores": intelligence.fetch_risk_scores(fetcher),
         "signal_convergence": intelligence.fetch_signal_convergence(fetcher),
+        "space_weather": space_weather.fetch_space_weather(fetcher),
+        "ai_watch": ai_watch.fetch_ai_watch(fetcher),
     }
 
     gathered = await asyncio.gather(
@@ -114,16 +118,10 @@ async def _fetch_overview() -> dict:
 # Routes
 # ---------------------------------------------------------------------------
 
-_INDEX_HTML: str | None = None
-
-
 async def index(request):
-    """Serve the dashboard HTML page."""
-    global _INDEX_HTML
-    if _INDEX_HTML is None:
-        html_path = Path(__file__).parent / "index.html"
-        _INDEX_HTML = html_path.read_text()
-    return HTMLResponse(_INDEX_HTML)
+    """Serve the dashboard HTML page (reloads on each request during dev)."""
+    html_path = Path(__file__).parent / "index.html"
+    return HTMLResponse(html_path.read_text())
 
 
 async def api_overview(request):

@@ -27,10 +27,9 @@ logger = logging.getLogger("world-intel-mcp.sources.news")
 
 _RSS_FEEDS: dict[str, list[tuple[str, str]]] = {
     "geopolitics": [
-        ("Reuters World", "https://feeds.reuters.com/Reuters/worldNews"),
-        ("AP Top News", "https://rsshub.app/apnews/topics/apf-topnews"),
         ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
         ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
+        ("AP Top News", "https://rsshub.app/apnews/topics/apf-topnews"),
     ],
     "security": [
         ("BleepingComputer", "https://www.bleepingcomputer.com/feed/"),
@@ -51,7 +50,7 @@ _RSS_FEEDS: dict[str, list[tuple[str, str]]] = {
     "military": [
         ("Defense One", "https://www.defenseone.com/rss/"),
         ("War on the Rocks", "https://warontherocks.com/feed/"),
-        ("The War Zone", "https://www.thedrive.com/the-war-zone/feed"),
+        ("The War Zone", "https://www.twz.com/feed"),
     ],
     "science": [
         ("Nature", "https://www.nature.com/nature.rss"),
@@ -188,7 +187,7 @@ async def fetch_news_feed(
         safe_name = feed_name.lower().replace(" ", "_")
         xml_text = await fetcher.get_xml(
             url,
-            source="rss",
+            source=f"rss:{safe_name}",
             cache_key=f"news:rss:{safe_name}",
             cache_ttl=300,
         )

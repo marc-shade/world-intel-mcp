@@ -704,6 +704,13 @@ function updateHudStats(data) {
     if (data.displacement && !data.displacement.error && data.displacement.global_totals) {
         pills.push('<div class="stat-pill"><span class="v warn">' + fmtBigPlain(data.displacement.global_totals.grand_total || 0) + '</span><span class="l">Displaced</span></div>');
     }
+    if (data.space_weather && !data.space_weather.error && data.space_weather.current_kp != null) {
+        var swKp = data.space_weather.current_kp;
+        pills.push('<div class="stat-pill"><span class="v' + (swKp >= 5 ? ' warn' : '') + '">' + swKp.toFixed(0) + '</span><span class="l">Kp</span></div>');
+    }
+    if (data.ai_watch && !data.ai_watch.error) {
+        pills.push('<div class="stat-pill"><span class="v">' + (data.ai_watch.count || 0) + '</span><span class="l">AI Papers</span></div>');
+    }
     $('#hudStats').innerHTML = safe(pills.join(''));
 }
 
@@ -776,13 +783,17 @@ function updateDrawer(data) {
         }
     }
     if (data.energy_prices && !data.energy_prices.error) {
-        var prices = data.energy_prices.prices || data.energy_prices.data || data.energy_prices;
-        var entries = Array.isArray(prices) ? prices : Object.entries(prices).map(function(e) { return Object.assign({name: e[0]}, typeof e[1] === 'object' ? e[1] : {value: e[1]}); });
-        if (entries.length) {
-            h += '<div class="sub">Energy</div><table class="dtable"><tbody>';
-            entries.slice(0, 6).forEach(function(item) {
-                var v = item.value || item.price || item.last_value;
-                h += '<tr><td>' + esc((item.name || '?').replace(/_/g, ' ')) + '</td><td class="bright">' + (typeof v === 'number' ? fmtNum(v) : esc(String(v || '\u2014'))) + '</td></tr>';
+        var ep = data.energy_prices;
+        var eRows = [];
+        if (ep.oil) {
+            if (ep.oil.brent && ep.oil.brent.price != null) eRows.push({name: 'Brent Crude', price: ep.oil.brent.price, date: ep.oil.brent.date});
+            if (ep.oil.wti && ep.oil.wti.price != null) eRows.push({name: 'WTI Crude', price: ep.oil.wti.price, date: ep.oil.wti.date});
+        }
+        if (ep.natural_gas && ep.natural_gas.price != null) eRows.push({name: 'Natural Gas', price: ep.natural_gas.price, date: ep.natural_gas.date});
+        if (eRows.length) {
+            h += '<div class="sub">Energy</div><table class="dtable"><thead><tr><th>Commodity</th><th>Price</th><th>Date</th></tr></thead><tbody>';
+            eRows.forEach(function(item) {
+                h += '<tr><td>' + esc(item.name) + '</td><td class="bright">$' + fmtNum(item.price) + '</td><td class="dim">' + esc(item.date || '\u2014') + '</td></tr>';
             });
             h += '</tbody></table>';
         }
@@ -860,6 +871,25 @@ function updateDrawer(data) {
         }
     }
 
+    if (data.space_weather && !data.space_weather.error) {
+        var sw = data.space_weather;
+        h += '<div class="sub">Space Weather</div><div class="mini-row">';
+        var kpVal = sw.current_kp;
+        var kpCls = kpVal >= 7 ? ' crit' : kpVal >= 5 ? ' warn' : '';
+        h += '<div class="mini-box"><div class="v' + kpCls + '">' + (kpVal != null ? fmtNum(kpVal, 1) : '\u2014') + '</div><div class="l">Kp Index</div></div>';
+        h += '<div class="mini-box"><div class="v">' + esc(sw.kp_level || '\u2014') + '</div><div class="l">Geo Level</div></div>';
+        h += '<div class="mini-box"><div class="v">' + esc(sw.latest_flare_class || '\u2014') + '</div><div class="l">X-Ray Flux</div></div>';
+        h += '</div>';
+        var swAlerts = sw.alerts || [];
+        if (swAlerts.length) {
+            h += '<table class="dtable"><thead><tr><th>Alert</th><th>Time</th></tr></thead><tbody>';
+            swAlerts.slice(0, 5).forEach(function(a) {
+                h += '<tr><td class="warn">' + esc(trunc(a.message || '?', 50)) + '</td><td class="dim">' + esc(ago(a.issue_datetime)) + '</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+    }
+
     // ── INTELLIGENCE ──
     h += '<div class="sh">INTELLIGENCE</div>';
     if (data.trending_keywords && !data.trending_keywords.error) {
@@ -907,7 +937,7 @@ function updateDrawer(data) {
         if (origins.length) {
             h += '<table class="dtable"><thead><tr><th>Origin</th><th>Refugees</th><th>IDPs</th></tr></thead><tbody>';
             origins.slice(0, 8).forEach(function(o) {
-                h += '<tr><td class="bright">' + esc(o.country_name || o.country || '?') + '</td><td>' + fmtBigPlain(o.refugees || 0) + '</td><td>' + fmtBigPlain(o.idps || 0) + '</td></tr>';
+                h += '<tr><td class="bright">' + esc(o.country_name || o.country || '?') + '</td><td>' + fmtBigPlain(o.refugees || 0) + '</td><td>' + fmtBigPlain(o.internally_displaced || o.idps || 0) + '</td></tr>';
             });
             h += '</tbody></table>';
         }
@@ -931,12 +961,46 @@ function updateDrawer(data) {
         if (anomalies.length) {
             h += '<div class="sub">Climate Anomalies</div><table class="dtable"><thead><tr><th>Zone</th><th>Temp</th><th>Precip</th></tr></thead><tbody>';
             anomalies.slice(0, 8).forEach(function(a) {
-                var temp = a.temperature_anomaly || a.temp_anomaly || a.temp_deviation;
-                var precip = a.precipitation_anomaly || a.precip_anomaly || a.precip_deviation;
-                h += '<tr><td>' + esc(a.zone || a.name || a.region || '?') + '</td><td class="' + (temp > 0 ? 'warn' : 'up') + '">' + (temp != null ? (temp > 0 ? '+' : '') + fmtNum(temp, 1) + '\u00B0C' : '\u2014') + '</td><td class="dim">' + (precip != null ? fmtNum(precip, 1) + 'mm' : '\u2014') + '</td></tr>';
+                var temp = a.temp_anomaly_c != null ? a.temp_anomaly_c : (a.temperature_anomaly || a.temp_anomaly || a.temp_deviation);
+                var precip = a.precip_anomaly_pct != null ? a.precip_anomaly_pct : (a.precipitation_anomaly || a.precip_anomaly || a.precip_deviation);
+                h += '<tr><td>' + esc(a.zone || a.name || a.region || '?') + '</td><td class="' + (temp > 0 ? 'warn' : 'up') + '">' + (temp != null ? (temp > 0 ? '+' : '') + fmtNum(temp, 1) + '\u00B0C' : '\u2014') + '</td><td class="' + (precip > 50 ? 'warn' : precip < -50 ? 'down' : 'dim') + '">' + (precip != null ? (precip > 0 ? '+' : '') + fmtNum(precip, 0) + '%' : '\u2014') + '</td></tr>';
             });
             h += '</tbody></table>';
         }
+    }
+
+    // ── AGI WATCH ──
+    h += '<div class="sh">AGI WATCH</div>';
+    if (data.ai_watch && !data.ai_watch.error) {
+        var aiw = data.ai_watch;
+        var labTrend = aiw.lab_trending || [];
+        if (labTrend.length) {
+            h += '<div class="sub">Lab Activity</div><div class="tags">';
+            labTrend.slice(0, 12).forEach(function(l) {
+                h += '<span class="tag' + (l.mentions > 3 ? ' tag-hot' : '') + '">' + esc(l.lab) + ' (' + l.mentions + ')</span>';
+            });
+            h += '</div>';
+        }
+        var byCat = aiw.by_category || {};
+        if (Object.keys(byCat).length) {
+            h += '<div class="mini-row">';
+            for (var catKey in byCat) {
+                if (byCat.hasOwnProperty(catKey)) {
+                    h += '<div class="mini-box"><div class="v">' + byCat[catKey] + '</div><div class="l">' + esc(catKey) + '</div></div>';
+                }
+            }
+            h += '</div>';
+        }
+        var aiItems = aiw.items || [];
+        if (aiItems.length) {
+            h += '<table class="dtable"><thead><tr><th>Paper/Post</th><th>Source</th><th>Age</th></tr></thead><tbody>';
+            aiItems.slice(0, 12).forEach(function(item) {
+                h += '<tr><td><a href="' + esc(item.link || '#') + '" target="_blank">' + esc(trunc(item.title || '?', 40)) + '</a></td><td class="dim">' + esc(item.feed_name || '\u2014') + '</td><td class="dim">' + ago(item.published) + '</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+    } else {
+        h += '<div class="dim" style="font-size:0.7rem;padding:4px 0">Loading AI feeds...</div>';
     }
 
     $('#drawerBody').innerHTML = safe(h);
@@ -949,7 +1013,7 @@ function updateTicker(data) {
     var articles = data.news_feed.articles || data.news_feed.items || [];
     if (!articles.length) return;
     var items = articles.slice(0, 30).map(function(a) {
-        return '<span class="ticker-item">' + esc(trunc(a.title || '?', 70)) + '<span class="src">' + esc(a.source || a.feed || '') + '</span></span>';
+        return '<span class="ticker-item">' + esc(trunc(a.title || '?', 70)) + '<span class="src">' + esc(a.feed_name || a.source || a.feed || '') + '</span></span>';
     });
     // Duplicate for seamless loop
     var all = items.join('<span class="ticker-item sep">\u2022</span>');
