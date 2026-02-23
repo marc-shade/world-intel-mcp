@@ -1,7 +1,7 @@
 """Military aviation tracking source for world-intel-mcp.
 
 Provides real-time military aircraft tracking via OpenSky Network and
-aircraft detail lookups via the Wingbits API.
+aircraft detail lookups via hexdb.io (free, no API key).
 """
 
 import asyncio
@@ -19,7 +19,7 @@ logger = logging.getLogger("world-intel-mcp.sources.military")
 # ---------------------------------------------------------------------------
 
 _OPENSKY_STATES_URL = "https://opensky-network.org/api/states/all"
-_WINGBITS_BASE_URL = "https://api.wingbits.com/v1/aircraft"
+_HEXDB_BASE_URL = "https://hexdb.io/api/v1/aircraft"
 
 # ICAO hex prefix ranges known to be allocated to military operators.
 MILITARY_ICAO_PREFIXES = [
@@ -236,7 +236,7 @@ async def fetch_theater_posture(fetcher: Fetcher) -> dict:
 
 
 async def fetch_aircraft_details(fetcher: Fetcher, icao24: str) -> dict:
-    """Look up detailed aircraft information from the Wingbits API.
+    """Look up detailed aircraft information from hexdb.io (free, no API key).
 
     Args:
         fetcher: Shared HTTP fetcher with caching and circuit breaking.
@@ -245,31 +245,25 @@ async def fetch_aircraft_details(fetcher: Fetcher, icao24: str) -> dict:
     Returns:
         Dict with aircraft detail payload, source, and timestamp.
     """
-    api_key = os.environ.get("WINGBITS_API_KEY")
-    if not api_key:
-        return {"error": "WINGBITS_API_KEY not configured"}
-
-    url = f"{_WINGBITS_BASE_URL}/{icao24}"
-    headers = {"X-API-Key": api_key}
+    url = f"{_HEXDB_BASE_URL}/{icao24}"
 
     data = await fetcher.get_json(
         url=url,
-        source="wingbits",
+        source="hexdb",
         cache_key=f"military:aircraft:{icao24}",
         cache_ttl=3600,
-        headers=headers,
     )
 
     if data is None:
-        logger.warning("Wingbits returned no data for icao24=%s", icao24)
+        logger.warning("hexdb.io returned no data for icao24=%s", icao24)
         return {
             "aircraft": {},
-            "source": "wingbits",
+            "source": "hexdb",
             "timestamp": _utc_now_iso(),
         }
 
     return {
         "aircraft": data,
-        "source": "wingbits",
+        "source": "hexdb",
         "timestamp": _utc_now_iso(),
     }

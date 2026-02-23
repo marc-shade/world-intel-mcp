@@ -205,7 +205,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="intel_aircraft_details",
-        description="Get aircraft details from Wingbits by ICAO24 hex code. Requires WINGBITS_API_KEY.",
+        description="Get aircraft details from hexdb.io by ICAO24 hex code (free, no API key).",
         inputSchema={
             "type": "object",
             "properties": {
@@ -576,7 +576,7 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
                     "economic": ["eia", "fred", "world-bank"],
                     "natural": ["usgs", "nasa-firms"],
                     "conflict": ["acled", "ucdp", "hdx"],
-                    "military": ["opensky", "wingbits"],
+                    "military": ["opensky", "hexdb"],
                     "infrastructure": ["cloudflare-radar", "nga-msi"],
                     "maritime": ["nga-msi"],
                     "climate": ["open-meteo"],
