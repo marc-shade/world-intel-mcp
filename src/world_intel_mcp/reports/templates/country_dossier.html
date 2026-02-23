@@ -50,7 +50,7 @@
     <div class="grid">
         <div class="card" style="text-align:center;">
             <h3>Instability Index</h3>
-            <div class="stat-number">{{ "%.1f"|format(instability.instability_index|default(0)) }}</div>
+            <div class="stat-number">{{ "%.1f"|format(instability.instability_index or 0) }}</div>
             <div class="stat-label" style="margin:0.5rem 0;">
                 <span class="risk-badge risk-{{ instability.risk_level|default('moderate')|lower }}">{{ instability.risk_level|default('Unknown') }}</span>
             </div>

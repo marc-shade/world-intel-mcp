@@ -74,7 +74,7 @@
             <h3>Sector Heatmap</h3>
             <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:1.5rem;">
                 {% for s in sector_heatmap %}
-                {% set pct = s.change_pct|default(0) %}
+                {% set pct = s.change_pct if s.change_pct is not none else 0 %}
                 {% if pct >= 2 %}
                     {% set bg = '#166534' %}
                 {% elif pct >= 0.5 %}
@@ -113,12 +113,12 @@
             {% for c in crypto[:15] %}
             <tr>
                 <td style="font-weight:600;">{{ c.symbol|default(c.id|default(''))|upper }}{% if c.name %} <span style="color:#64748b;font-weight:normal;">{{ c.name }}</span>{% endif %}</td>
-                <td>{{ "${:,.2f}".format(c.current_price|default(c.price|default(0))) }}</td>
-                <td class="{{ 'up' if (c.price_change_percentage_24h|default(c.change_24h|default(0))) >= 0 else 'down' }}">
-                    {{ "%+.2f"|format(c.price_change_percentage_24h|default(c.change_24h|default(0))) }}%
+                <td>{{ "${:,.2f}".format(c.current_price or c.price or 0) }}</td>
+                <td class="{{ 'up' if (c.price_change_percentage_24h or c.change_24h or 0) >= 0 else 'down' }}">
+                    {{ "%+.2f"|format(c.price_change_percentage_24h or c.change_24h or 0) }}%
                 </td>
                 <td>
-                    {% set mcap = c.market_cap|default(0) %}
+                    {% set mcap = c.market_cap or 0 %}
                     {% if mcap >= 1e12 %}${{ "%.1f"|format(mcap / 1e12) }}T
                     {% elif mcap >= 1e9 %}${{ "%.1f"|format(mcap / 1e9) }}B
                     {% elif mcap >= 1e6 %}${{ "%.1f"|format(mcap / 1e6) }}M
@@ -126,7 +126,7 @@
                     {% else %}—{% endif %}
                 </td>
                 <td>
-                    {% set vol = c.total_volume|default(c.volume_24h|default(0)) %}
+                    {% set vol = c.total_volume or c.volume_24h or 0 %}
                     {% if vol >= 1e9 %}${{ "%.1f"|format(vol / 1e9) }}B
                     {% elif vol >= 1e6 %}${{ "%.1f"|format(vol / 1e6) }}M
                     {% elif vol > 0 %}${{ "{:,.0f}".format(vol) }}
@@ -186,8 +186,8 @@
             <tr>
                 <td style="font-weight:600;">{{ name }}</td>
                 {% if data is mapping %}
-                <td class="{{ 'up' if (data.flow|default(data.net_flow|default(0))) >= 0 else 'down' }}">
-                    {% set flow = data.flow|default(data.net_flow|default(0)) %}
+                <td class="{{ 'up' if (data.flow or data.net_flow or 0) >= 0 else 'down' }}">
+                    {% set flow = data.flow or data.net_flow or 0 %}
                     {% if flow >= 1e9 %}${{ "%+.1f"|format(flow / 1e9) }}B
                     {% elif flow >= 1e6 %}${{ "%+.1f"|format(flow / 1e6) }}M
                     {% else %}{{ "%+.2f"|format(flow) }}{% endif %}
