@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phoenix Intelligence Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', 'Fira Code', monospace; background: #0a0e1a; color: #c8d6e5; line-height: 1.5; }
+        a { color: #60a5fa; text-decoration: none; }
+
+        /* Status bar */
+        .status-bar {
+            position: sticky; top: 0; z-index: 100;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.5rem 1.5rem;
+            background: linear-gradient(135deg, #0f172a 0%, #1a1f36 100%);
+            border-bottom: 1px solid #2d3748;
+            font-size: 0.8rem;
+        }
+        .status-bar .title { font-size: 1rem; font-weight: 700; color: #f1f5f9; letter-spacing: 0.5px; }
+        .status-bar .title span { color: #f59e0b; }
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .dot-green { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+        .dot-yellow { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+        .dot-red { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+        .pulse { animation: pulse 2s ease-in-out infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        /* Grid layout */
+        .container { max-width: 1600px; margin: 0 auto; padding: 1rem; }
+        .grid { display: grid; gap: 1rem; }
+        .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+
+        /* Cards */
+        .card {
+            background: linear-gradient(180deg, #111827 0%, #0f1523 100%);
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            padding: 1rem;
+            overflow: hidden;
+            transition: border-color 0.3s;
+        }
+        .card:hover { border-color: #334155; }
+        .card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 0.75rem; padding-bottom: 0.5rem;
+            border-bottom: 1px solid #1e293b;
+        }
+        .card-title { font-size: 0.85rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+        .card-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; background: #1e293b; color: #64748b; }
+        .card-error { color: #64748b; font-style: italic; font-size: 0.85rem; padding: 1rem 0; }
+        .span-2 { grid-column: span 2; }
+
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+        th { color: #64748b; font-weight: 500; text-align: left; padding: 0.35rem 0.5rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: 0.35rem 0.5rem; border-top: 1px solid #1a2236; white-space: nowrap; }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+
+        /* Values */
+        .up { color: #22c55e; }
+        .down { color: #ef4444; }
+        .muted { color: #4a5568; }
+        .bright { color: #f1f5f9; font-weight: 600; }
+        .warn { color: #f59e0b; }
+
+        /* Stat boxes */
+        .stat-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .stat-box {
+            flex: 1; min-width: 100px;
+            background: #0d1117; border: 1px solid #1e293b; border-radius: 6px;
+            padding: 0.75rem; text-align: center;
+        }
+        .stat-value { font-size: 1.6rem; font-weight: 700; color: #f1f5f9; }
+        .stat-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; margin-top: 0.25rem; }
+
+        /* Heatmap cells */
+        .heatmap { display: flex; flex-wrap: wrap; gap: 4px; }
+        .hm-cell {
+            padding: 6px 10px; border-radius: 4px; font-size: 0.78rem;
+            font-weight: 600; min-width: 90px; text-align: center;
+        }
+
+        /* Tags */
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin: 2px; background: #1a2236; color: #94a3b8; }
+        .tag-hot { background: #7f1d1d; color: #fca5a5; }
+
+        /* Scrollable */
+        .scroll-box { max-height: 280px; overflow-y: auto; }
+        .scroll-box::-webkit-scrollbar { width: 4px; }
+        .scroll-box::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+        /* Severity badges */
+        .sev-critical { color: #ef4444; font-weight: 700; }
+        .sev-high { color: #f59e0b; }
+        .sev-medium { color: #6b7280; }
+
+        /* Loading overlay */
+        #loading {
+            position: fixed; inset: 0; z-index: 200;
+            display: flex; align-items: center; justify-content: center;
+            background: #0a0e1a; transition: opacity 0.5s;
+        }
+        #loading.hidden { opacity: 0; pointer-events: none; }
+        .loader { width: 40px; height: 40px; border: 3px solid #1e293b; border-top-color: #f59e0b; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Responsive */
+        @media (max-width: 1200px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 800px) { .grid-3, .grid-2 { grid-template-columns: 1fr; } .span-2 { grid-column: span 1; } }
+    </style>
+</head>
+<body>
+
+<div id="loading"><div class="loader"></div></div>
+
+<!-- Status Bar -->
+<div class="status-bar">
+    <div class="title"><span>PHOENIX</span> INTELLIGENCE DASHBOARD</div>
+    <div>
+        <span class="status-dot dot-green pulse" id="connDot"></span>
+        <span id="connLabel">Connecting...</span>
+        &nbsp;&middot;&nbsp;
+        <span id="sourceHealth">--</span>
+        &nbsp;&middot;&nbsp;
+        <span id="lastUpdate">--</span>
+    </div>
+</div>
+
+<div class="container">
+
+    <!-- Row 1: Market Overview -->
+    <div class="grid grid-3" style="margin-top:1rem;">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Equity Indices</span>
+                <span class="card-badge" id="equityBadge">--</span>
+            </div>
+            <div class="scroll-box">
+                <table><thead><tr><th>Symbol</th><th>Price</th><th>Chg</th><th>%</th></tr></thead><tbody id="equityBody"></tbody></table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Cryptocurrency</span>
+                <span class="card-badge" id="cryptoBadge">--</span>
+            </div>
+            <div class="scroll-box">
+                <table><thead><tr><th>Coin</th><th>Price</th><th>24h</th><th>MCap</th></tr></thead><tbody id="cryptoBody"></tbody></table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Macro Signals</span>
+                <span class="card-badge">Live</span>
+            </div>
+            <div id="macroContent" class="stat-row" style="flex-wrap:wrap;"></div>
+        </div>
+    </div>
+
+    <!-- Row 2: Sector Heatmap + Energy -->
+    <div class="grid grid-3" style="margin-top:1rem;">
+        <div class="card span-2">
+            <div class="card-header">
+                <span class="card-title">Sector Performance</span>
+            </div>
+            <div class="heatmap" id="sectorHeatmap"></div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Energy Prices</span>
+            </div>
+            <div id="energyContent"></div>
+        </div>
+    </div>
+
+    <!-- Row 3: Threats + Military + Infra -->
+    <div class="grid grid-3" style="margin-top:1rem;">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Cyber Threats</span>
+                <span class="card-badge" id="cyberBadge">--</span>
+            </div>
+            <div id="cyberStats" class="stat-row" style="margin-bottom:0.75rem;"></div>
+            <div class="scroll-box">
+                <table><thead><tr><th>Threat</th><th>Type</th><th>Severity</th></tr></thead><tbody id="cyberBody"></tbody></table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Military Activity</span>
+                <span class="card-badge" id="milBadge">--</span>
+            </div>
+            <div id="milStats" class="stat-row" style="margin-bottom:0.75rem;"></div>
+            <div class="scroll-box">
+                <table><thead><tr><th>Callsign</th><th>Type</th><th>Alt</th><th>Origin</th></tr></thead><tbody id="milBody"></tbody></table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Infrastructure</span>
+            </div>
+            <div id="infraStats" class="stat-row" style="margin-bottom:0.75rem;"></div>
+            <div class="scroll-box" id="infraContent"></div>
+        </div>
+    </div>
+
+    <!-- Row 4: Natural + News + Predictions -->
+    <div class="grid grid-3" style="margin-top:1rem;">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Natural Events</span>
+                <span class="card-badge" id="naturalBadge">--</span>
+            </div>
+            <div id="naturalStats" class="stat-row" style="margin-bottom:0.75rem;"></div>
+            <div class="scroll-box">
+                <table><thead><tr><th>Mag</th><th>Location</th><th>Depth</th><th>Time</th></tr></thead><tbody id="quakeBody"></tbody></table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Intelligence News</span>
+                <span class="card-badge" id="newsBadge">--</span>
+            </div>
+            <div id="trendingKeywords" style="margin-bottom:0.75rem;"></div>
+            <div class="scroll-box">
+                <table><thead><tr><th>Headline</th><th>Source</th></tr></thead><tbody id="newsBody"></tbody></table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Prediction Markets</span>
+                <span class="card-badge" id="predBadge">--</span>
+            </div>
+            <div class="scroll-box">
+                <table><thead><tr><th>Market</th><th>Prob</th><th>Vol</th></tr></thead><tbody id="predBody"></tbody></table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 5: Aviation + Climate + Nav -->
+    <div class="grid grid-3" style="margin-top:1rem;">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Airport Delays</span>
+                <span class="card-badge" id="aviationBadge">--</span>
+            </div>
+            <div class="scroll-box">
+                <table><thead><tr><th>Airport</th><th>Reason</th><th>Delay</th></tr></thead><tbody id="aviationBody"></tbody></table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Climate Anomalies</span>
+            </div>
+            <div class="scroll-box" id="climateContent"></div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Nav Warnings</span>
+                <span class="card-badge" id="navBadge">--</span>
+            </div>
+            <div class="scroll-box">
+                <table><thead><tr><th>Area</th><th>Warning</th></tr></thead><tbody id="navBody"></tbody></table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ========================================================================
+// Phoenix Intelligence Dashboard — Live Update Engine
+// All DOM updates use DOMPurify.sanitize() for XSS protection.
+// ========================================================================
+
+const $ = (sel) => document.querySelector(sel);
+const safe = (html) => DOMPurify.sanitize(html, {ALLOWED_TAGS: ['tr','td','th','table','thead','tbody','a','span','div','br'], ALLOWED_ATTR: ['class','style','href','target']});
+
+// Formatters
+function fmtNum(n, dec) { dec = dec != null ? dec : 2; return n == null ? '\u2014' : Number(n).toLocaleString(undefined, {minimumFractionDigits: dec, maximumFractionDigits: dec}); }
+function fmtPct(n) { return n == null ? '\u2014' : (n >= 0 ? '+' : '') + fmtNum(n); }
+function fmtBig(n) { if (n == null) return '\u2014'; if (Math.abs(n) >= 1e12) return '$' + (n/1e12).toFixed(1) + 'T'; if (Math.abs(n) >= 1e9) return '$' + (n/1e9).toFixed(1) + 'B'; if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'; return '$' + fmtNum(n, 0); }
+function cls(n) { return n == null ? '' : n >= 0 ? 'up' : 'down'; }
+function sevCls(s) { s = (s||'').toLowerCase(); return s === 'critical' ? 'sev-critical' : s === 'high' ? 'sev-high' : 'sev-medium'; }
+function ago(ts) {
+    if (!ts) return '\u2014';
+    var d = new Date(ts), s = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s/60) + 'm ago';
+    if (s < 86400) return Math.floor(s/3600) + 'h ago'; return Math.floor(s/86400) + 'd ago';
+}
+function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function trunc(s, n) { n = n || 50; s = s || ''; return s.length > n ? s.slice(0, n) + '...' : s; }
+
+// ========================================================================
+// Update functions — all use safe() for innerHTML
+// ========================================================================
+
+function updateEquity(data) {
+    if (!data || data.error) { $('#equityBody').innerHTML = safe('<tr><td colspan="4" class="card-error">Unavailable</td></tr>'); return; }
+    var quotes = data.quotes || data.data || (Array.isArray(data) ? data : []);
+    $('#equityBadge').textContent = quotes.length + ' symbols';
+    var rows = quotes.map(function(q) {
+        var price = q.price || q.regularMarketPrice || 0;
+        var chg = q.change || q.regularMarketChange || 0;
+        var pct = q.change_pct || q.regularMarketChangePercent || 0;
+        return '<tr><td class="bright">' + esc(q.symbol || '?') + '</td><td>' + fmtNum(price) + '</td><td class="' + cls(chg) + '">' + fmtPct(chg) + '</td><td class="' + cls(pct) + '">' + fmtPct(pct) + '%</td></tr>';
+    }).join('');
+    $('#equityBody').innerHTML = safe(rows);
+}
+
+function updateCrypto(data) {
+    if (!data || data.error) { $('#cryptoBody').innerHTML = safe('<tr><td colspan="4" class="card-error">Unavailable</td></tr>'); return; }
+    var coins = data.coins || data.data || (Array.isArray(data) ? data : []);
+    $('#cryptoBadge').textContent = coins.length + ' coins';
+    var rows = coins.slice(0, 15).map(function(c) {
+        var price = c.current_price || c.price || 0;
+        var chg = c.price_change_percentage_24h || c.change_24h || 0;
+        var mcap = c.market_cap || 0;
+        return '<tr><td class="bright">' + esc((c.symbol || c.id || '?').toUpperCase()) + '</td><td>$' + fmtNum(price) + '</td><td class="' + cls(chg) + '">' + fmtPct(chg) + '%</td><td class="muted">' + fmtBig(mcap) + '</td></tr>';
+    }).join('');
+    $('#cryptoBody').innerHTML = safe(rows);
+}
+
+function updateMacro(data) {
+    if (!data || data.error) { $('#macroContent').innerHTML = safe('<div class="card-error">Unavailable</div>'); return; }
+    var signals = data.signals || data;
+    if (typeof signals !== 'object') { $('#macroContent').innerHTML = safe('<div class="card-error">No data</div>'); return; }
+    var html = '';
+    for (var name in signals) {
+        if (!signals.hasOwnProperty(name)) continue;
+        var info = signals[name];
+        if (info && typeof info === 'object' && !Array.isArray(info)) {
+            var entries = Object.entries(info);
+            var mainVal = entries[0] ? entries[0][1] : '\u2014';
+            html += '<div class="stat-box"><div class="stat-value" style="font-size:1.1rem;">' + (typeof mainVal === 'number' ? fmtNum(mainVal, mainVal < 1 ? 4 : 2) : esc(String(mainVal))) + '</div><div class="stat-label">' + esc(name.replace(/_/g, ' ')) + '</div></div>';
+        } else {
+            html += '<div class="stat-box"><div class="stat-value" style="font-size:1.1rem;">' + (info != null ? esc(String(info)) : '\u2014') + '</div><div class="stat-label">' + esc(name.replace(/_/g, ' ')) + '</div></div>';
+        }
+    }
+    $('#macroContent').innerHTML = safe(html);
+}
+
+function updateSectorHeatmap(data) {
+    if (!data || data.error) { $('#sectorHeatmap').innerHTML = safe('<div class="card-error">Unavailable</div>'); return; }
+    var sectors = data.sectors || data.data || (Array.isArray(data) ? data : []);
+    var html = sectors.map(function(s) {
+        var pct = s.change_pct || 0;
+        var bg, fg;
+        if (pct >= 2) { bg = '#166534'; fg = '#86efac'; }
+        else if (pct >= 0.5) { bg = '#14532d'; fg = '#86efac'; }
+        else if (pct >= 0) { bg = '#1a2e1a'; fg = '#86efac'; }
+        else if (pct >= -0.5) { bg = '#2e1a1a'; fg = '#fca5a5'; }
+        else if (pct >= -2) { bg = '#7f1d1d'; fg = '#fca5a5'; }
+        else { bg = '#991b1b'; fg = '#fca5a5'; }
+        return '<div class="hm-cell" style="background:' + bg + ';color:' + fg + ';">' + esc(s.symbol || s.name || '?') + '<br>' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%</div>';
+    }).join('');
+    $('#sectorHeatmap').innerHTML = safe(html);
+}
+
+function updateEnergy(data) {
+    if (!data || data.error) { $('#energyContent').innerHTML = safe('<div class="card-error">Unavailable</div>'); return; }
+    var prices = data.prices || data.data || data;
+    if (typeof prices !== 'object') { $('#energyContent').innerHTML = safe('<div class="card-error">No data</div>'); return; }
+    var html = '<table><thead><tr><th>Commodity</th><th>Price</th></tr></thead><tbody>';
+    var entries = Array.isArray(prices) ? prices : Object.entries(prices).map(function(e) { return Object.assign({name: e[0]}, typeof e[1] === 'object' ? e[1] : {value: e[1]}); });
+    entries.forEach(function(item) {
+        var name = item.name || item.series_id || '?';
+        var val = item.value || item.price || item.last_value || '\u2014';
+        html += '<tr><td>' + esc(name.replace(/_/g, ' ')) + '</td><td class="bright">' + (typeof val === 'number' ? fmtNum(val) : esc(String(val))) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    $('#energyContent').innerHTML = safe(html);
+}
+
+function updateCyber(data) {
+    if (!data || data.error) { $('#cyberBody').innerHTML = safe('<tr><td colspan="3" class="card-error">Unavailable</td></tr>'); $('#cyberStats').innerHTML = ''; return; }
+    var threats = data.threats || data.data || (Array.isArray(data) ? data : []);
+    var bySev = data.by_severity || {};
+    $('#cyberBadge').textContent = threats.length + ' IOCs';
+    $('#cyberStats').innerHTML = safe(
+        '<div class="stat-box"><div class="stat-value sev-critical">' + (bySev.critical || 0) + '</div><div class="stat-label">Critical</div></div>' +
+        '<div class="stat-box"><div class="stat-value sev-high">' + (bySev.high || 0) + '</div><div class="stat-label">High</div></div>' +
+        '<div class="stat-box"><div class="stat-value">' + (bySev.medium || 0) + '</div><div class="stat-label">Medium</div></div>'
+    );
+    var rows = threats.slice(0, 20).map(function(t) {
+        return '<tr><td>' + esc(trunc(t.indicator || t.url || t.ioc || '?', 40)) + '</td><td class="muted">' + esc(t.threat_type || t.type || t.source || '\u2014') + '</td><td class="' + sevCls(t.severity) + '">' + esc(t.severity || '\u2014') + '</td></tr>';
+    }).join('');
+    $('#cyberBody').innerHTML = safe(rows);
+}
+
+function updateMilitary(data) {
+    if (!data || data.error) { $('#milBody').innerHTML = safe('<tr><td colspan="4" class="card-error">Unavailable</td></tr>'); return; }
+    var flights = data.flights || data.aircraft || data.data || (Array.isArray(data) ? data : []);
+    var total = data.total_military_aircraft || flights.length;
+    $('#milBadge').textContent = total + ' aircraft';
+    $('#milStats').innerHTML = safe('<div class="stat-box"><div class="stat-value">' + total + '</div><div class="stat-label">Military Aircraft</div></div>');
+    var rows = flights.slice(0, 15).map(function(f) {
+        var alt = f.altitude ? Math.round(f.altitude) + 'ft' : f.baro_altitude ? Math.round(f.baro_altitude) + 'ft' : '\u2014';
+        return '<tr><td class="bright">' + esc(f.callsign || f.icao24 || '?') + '</td><td class="muted">' + esc(f.type || f.category || '\u2014') + '</td><td>' + alt + '</td><td class="muted">' + esc(f.origin_country || '\u2014') + '</td></tr>';
+    }).join('');
+    $('#milBody').innerHTML = safe(rows);
+}
+
+function updateInfra(data_outages, data_cables) {
+    var statsHtml = '';
+    var contentHtml = '';
+    if (data_outages && !data_outages.error) {
+        var outages = data_outages.outages || data_outages.data || (Array.isArray(data_outages) ? data_outages : []);
+        var count = data_outages.ongoing_count || outages.length;
+        statsHtml += '<div class="stat-box"><div class="stat-value ' + (count > 0 ? 'warn' : '') + '">' + count + '</div><div class="stat-label">Outages</div></div>';
+        if (outages.length > 0) {
+            contentHtml += '<table><thead><tr><th>Location</th><th>Status</th></tr></thead><tbody>';
+            outages.slice(0, 8).forEach(function(o) {
+                contentHtml += '<tr><td>' + esc(o.location || o.asName || '?') + '</td><td class="warn">' + esc(o.status || 'ongoing') + '</td></tr>';
+            });
+            contentHtml += '</tbody></table>';
+        }
+    }
+    if (data_cables && !data_cables.error) {
+        var score = data_cables.health_score || data_cables.overall_score;
+        var warnings = data_cables.warnings || data_cables.data || [];
+        var warnCount = Array.isArray(warnings) ? warnings.length : 0;
+        statsHtml += '<div class="stat-box"><div class="stat-value">' + (score != null ? score + '%' : warnCount) + '</div><div class="stat-label">' + (score != null ? 'Cable Health' : 'Cable Warnings') + '</div></div>';
+    }
+    $('#infraStats').innerHTML = safe(statsHtml || '<div class="stat-box"><div class="stat-value muted">\u2014</div><div class="stat-label">No data</div></div>');
+    $('#infraContent').innerHTML = safe(contentHtml || '<div class="card-error">No active outages</div>');
+}
+
+function updateNatural(data_quakes, data_fires) {
+    var statsHtml = '';
+    if (data_quakes && !data_quakes.error) {
+        var quakes = data_quakes.earthquakes || data_quakes.features || data_quakes.data || (Array.isArray(data_quakes) ? data_quakes : []);
+        statsHtml += '<div class="stat-box"><div class="stat-value">' + quakes.length + '</div><div class="stat-label">Quakes</div></div>';
+        $('#naturalBadge').textContent = quakes.length + ' events';
+        var rows = quakes.slice(0, 15).map(function(q) {
+            var mag = q.magnitude || (q.properties && q.properties.mag) || '?';
+            var place = q.place || (q.properties && q.properties.place) || '?';
+            var depth = q.depth || (q.geometry && q.geometry.coordinates && q.geometry.coordinates[2]) || '?';
+            var time = q.time || (q.properties && q.properties.time) || '';
+            var magClass = mag >= 6 ? 'sev-critical' : mag >= 5 ? 'sev-high' : '';
+            return '<tr><td class="' + magClass + ' bright">' + (typeof mag === 'number' ? mag.toFixed(1) : mag) + '</td><td>' + esc(trunc(place, 35)) + '</td><td class="muted">' + (typeof depth === 'number' ? depth.toFixed(0) + 'km' : depth) + '</td><td class="muted">' + ago(time) + '</td></tr>';
+        }).join('');
+        $('#quakeBody').innerHTML = safe(rows);
+    }
+    if (data_fires && !data_fires.error) {
+        var count = data_fires.fire_count || data_fires.count || 0;
+        statsHtml += '<div class="stat-box"><div class="stat-value ' + (count > 100 ? 'warn' : '') + '">' + count + '</div><div class="stat-label">Wildfires</div></div>';
+    }
+    $('#naturalStats').innerHTML = safe(statsHtml || '<div class="card-error">Unavailable</div>');
+}
+
+function updateNews(data_news, data_trending) {
+    if (data_trending && !data_trending.error) {
+        var keywords = data_trending.keywords || data_trending.data || (Array.isArray(data_trending) ? data_trending : []);
+        var top = keywords.slice(0, 20);
+        if (top.length > 0) {
+            var khtml = top.map(function(k) {
+                var word = typeof k === 'string' ? k : (k.keyword || k.word || k.term || '?');
+                var count = typeof k === 'object' ? (k.count || k.frequency || '') : '';
+                var hot = count && count > 5;
+                return '<span class="tag ' + (hot ? 'tag-hot' : '') + '">' + esc(word) + (count ? ' (' + count + ')' : '') + '</span>';
+            }).join('');
+            $('#trendingKeywords').innerHTML = safe(khtml);
+        }
+    }
+    if (data_news && !data_news.error) {
+        var articles = data_news.articles || data_news.items || data_news.data || (Array.isArray(data_news) ? data_news : []);
+        $('#newsBadge').textContent = articles.length + ' items';
+        var rows = articles.slice(0, 20).map(function(a) {
+            var title = esc(trunc(a.title || '?', 55));
+            var link = a.link ? '<a href="' + esc(a.link) + '" target="_blank">' + title + '</a>' : title;
+            return '<tr><td>' + link + '</td><td class="muted">' + esc(trunc(a.source || a.feed || '', 15)) + '</td></tr>';
+        }).join('');
+        $('#newsBody').innerHTML = safe(rows);
+    }
+}
+
+function updatePredictions(data) {
+    if (!data || data.error) { $('#predBody').innerHTML = safe('<tr><td colspan="3" class="card-error">Unavailable</td></tr>'); return; }
+    var mkts = data.markets || data.data || (Array.isArray(data) ? data : []);
+    $('#predBadge').textContent = mkts.length + ' markets';
+    var rows = mkts.slice(0, 15).map(function(m) {
+        var prob = m.probability || m.outcomePrices || m.yes_price;
+        var vol = m.volume || m.liquidityCloses || 0;
+        return '<tr><td>' + esc(trunc(m.question || m.title || m.groupItemTitle || '?', 45)) + '</td><td class="bright">' + (prob != null ? (typeof prob === 'number' ? (prob * 100).toFixed(0) + '%' : esc(String(prob))) : '\u2014') + '</td><td class="muted">' + fmtBig(vol) + '</td></tr>';
+    }).join('');
+    $('#predBody').innerHTML = safe(rows);
+}
+
+function updateAviation(data) {
+    if (!data || data.error) { $('#aviationBody').innerHTML = safe('<tr><td colspan="3" class="card-error">Unavailable</td></tr>'); return; }
+    var delays = data.delays || data.data || (Array.isArray(data) ? data : []);
+    $('#aviationBadge').textContent = delays.length + ' delays';
+    if (delays.length === 0) { $('#aviationBody').innerHTML = safe('<tr><td colspan="3" class="card-error">No active delays</td></tr>'); return; }
+    var rows = delays.slice(0, 15).map(function(d) {
+        return '<tr><td class="bright">' + esc(d.airport || d.iata || d.name || '?') + '</td><td class="muted">' + esc(trunc(d.reason || d.type || '\u2014', 30)) + '</td><td class="warn">' + esc(d.delay || d.average || d.min || '\u2014') + '</td></tr>';
+    }).join('');
+    $('#aviationBody').innerHTML = safe(rows);
+}
+
+function updateClimate(data) {
+    if (!data || data.error) { $('#climateContent').innerHTML = safe('<div class="card-error">Unavailable</div>'); return; }
+    var anomalies = data.anomalies || data.zones || data.data || (Array.isArray(data) ? data : []);
+    if (anomalies.length === 0) { $('#climateContent').innerHTML = safe('<div class="card-error">No anomalies detected</div>'); return; }
+    var html = '<table><thead><tr><th>Zone</th><th>Temp</th><th>Precip</th></tr></thead><tbody>';
+    anomalies.slice(0, 15).forEach(function(a) {
+        var temp = a.temperature_anomaly || a.temp_anomaly || a.temp_deviation;
+        var precip = a.precipitation_anomaly || a.precip_anomaly || a.precip_deviation;
+        html += '<tr><td>' + esc(a.zone || a.name || a.region || '?') + '</td><td class="' + (temp > 0 ? 'warn' : 'up') + '">' + (temp != null ? (temp > 0 ? '+' : '') + fmtNum(temp, 1) + '\u00B0C' : '\u2014') + '</td><td class="muted">' + (precip != null ? fmtNum(precip, 1) + 'mm' : '\u2014') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    $('#climateContent').innerHTML = safe(html);
+}
+
+function updateNavWarnings(data) {
+    if (!data || data.error) { $('#navBody').innerHTML = safe('<tr><td colspan="2" class="card-error">Unavailable</td></tr>'); return; }
+    var warnings = data.warnings || data.data || (Array.isArray(data) ? data : []);
+    $('#navBadge').textContent = warnings.length + ' active';
+    if (warnings.length === 0) { $('#navBody').innerHTML = safe('<tr><td colspan="2" class="card-error">No active warnings</td></tr>'); return; }
+    var rows = warnings.slice(0, 12).map(function(w) {
+        return '<tr><td class="bright">' + esc(w.navArea || w.area || w.subregion || '?') + '</td><td class="muted">' + esc(trunc(w.text || w.description || w.subject || '\u2014', 50)) + '</td></tr>';
+    }).join('');
+    $('#navBody').innerHTML = safe(rows);
+}
+
+// ========================================================================
+// Master update
+// ========================================================================
+
+function updateAll(data) {
+    updateEquity(data.market_quotes);
+    updateCrypto(data.crypto_quotes);
+    updateMacro(data.macro_signals);
+    updateSectorHeatmap(data.sector_heatmap);
+    updateEnergy(data.energy_prices);
+    updateCyber(data.cyber_threats);
+    updateMilitary(data.military_flights);
+    updateInfra(data.internet_outages, data.cable_health);
+    updateNatural(data.earthquakes, data.wildfires);
+    updateNews(data.news_feed, data.trending_keywords);
+    updatePredictions(data.prediction_markets);
+    updateAviation(data.airport_delays);
+    updateClimate(data.climate_anomalies);
+    updateNavWarnings(data.nav_warnings);
+
+    if (data.timestamp) {
+        var t = new Date(data.timestamp);
+        $('#lastUpdate').textContent = t.toLocaleTimeString();
+    }
+}
+
+// ========================================================================
+// SSE connection with exponential backoff reconnection
+// ========================================================================
+
+var reconnectDelay = 1000;
+
+function connectSSE() {
+    var source = new EventSource('/api/stream');
+
+    source.onopen = function() {
+        $('#connDot').className = 'status-dot dot-green pulse';
+        $('#connLabel').textContent = 'Live';
+        reconnectDelay = 1000;
+    };
+
+    source.onmessage = function(event) {
+        try {
+            var data = JSON.parse(event.data);
+            if (data.error && !data.market_quotes) {
+                console.warn('Stream error:', data.error);
+                return;
+            }
+            updateAll(data);
+            document.getElementById('loading').classList.add('hidden');
+        } catch (e) {
+            console.error('Parse error:', e);
+        }
+    };
+
+    source.onerror = function() {
+        source.close();
+        $('#connDot').className = 'status-dot dot-red';
+        $('#connLabel').textContent = 'Reconnecting...';
+        setTimeout(connectSSE, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+    };
+}
+
+connectSSE();
+</script>
+</body>
+</html>

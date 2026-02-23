@@ -974,5 +974,16 @@ def sync_cmd(source: str | None) -> None:
         console.print(f"Evicted {removed} expired cache entries")
 
 
+@main.command()
+@click.option("--port", default=8501, type=int, help="Port to listen on")
+@click.option("--host", default="127.0.0.1", help="Host to bind to")
+def dashboard(port: int, host: str) -> None:
+    """Launch the live intelligence dashboard."""
+    from .dashboard.app import run as run_dashboard
+
+    console.print(f"[bold]Starting Intelligence Dashboard[/bold] on http://{host}:{port}")
+    run_dashboard(host=host, port=port)
+
+
 if __name__ == "__main__":
     main()
