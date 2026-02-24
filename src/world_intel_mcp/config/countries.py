@@ -108,3 +108,66 @@ def match_country_by_name(name: str) -> str | None:
             if keyword in lower or lower in keyword:
                 return iso3
     return None
+
+
+# ---------------------------------------------------------------------------
+# Election calendar
+# ---------------------------------------------------------------------------
+
+UPCOMING_ELECTIONS: list[dict] = [
+    {"country": "Germany", "iso3": "DEU", "election_type": "federal", "date": "2025-02-23", "description": "Federal election (Bundestag)", "instability_impact": "low"},
+    {"country": "Ecuador", "iso3": "ECU", "election_type": "presidential", "date": "2025-02-09", "description": "Presidential runoff", "instability_impact": "medium"},
+    {"country": "Belarus", "iso3": "BLR", "election_type": "presidential", "date": "2025-01-26", "description": "Presidential election", "instability_impact": "high"},
+    {"country": "Canada", "iso3": "CAN", "election_type": "federal", "date": "2025-10-20", "description": "Federal election", "instability_impact": "low"},
+    {"country": "Iraq", "iso3": "IRQ", "election_type": "parliamentary", "date": "2025-10-01", "description": "Parliamentary election", "instability_impact": "high"},
+    {"country": "Chile", "iso3": "CHL", "election_type": "presidential", "date": "2025-11-16", "description": "Presidential election", "instability_impact": "medium"},
+    {"country": "Poland", "iso3": "POL", "election_type": "presidential", "date": "2025-05-18", "description": "Presidential election", "instability_impact": "low"},
+    {"country": "Philippines", "iso3": "PHL", "election_type": "midterm", "date": "2025-05-12", "description": "Midterm elections", "instability_impact": "medium"},
+    {"country": "Singapore", "iso3": "SGP", "election_type": "general", "date": "2025-05-03", "description": "General election", "instability_impact": "low"},
+    {"country": "Australia", "iso3": "AUS", "election_type": "federal", "date": "2025-05-17", "description": "Federal election", "instability_impact": "low"},
+    {"country": "South Korea", "iso3": "KOR", "election_type": "presidential", "date": "2025-06-03", "description": "Snap presidential election", "instability_impact": "medium"},
+    {"country": "Ivory Coast", "iso3": "CIV", "election_type": "presidential", "date": "2025-10-01", "description": "Presidential election", "instability_impact": "high"},
+    {"country": "Norway", "iso3": "NOR", "election_type": "parliamentary", "date": "2025-09-08", "description": "Parliamentary election", "instability_impact": "low"},
+    {"country": "United States", "iso3": "USA", "election_type": "midterm", "date": "2026-11-03", "description": "Midterm elections", "instability_impact": "medium"},
+    {"country": "Brazil", "iso3": "BRA", "election_type": "municipal", "date": "2026-10-04", "description": "Municipal elections", "instability_impact": "medium"},
+    {"country": "Mexico", "iso3": "MEX", "election_type": "midterm", "date": "2027-06-06", "description": "Midterm elections", "instability_impact": "medium"},
+    {"country": "France", "iso3": "FRA", "election_type": "presidential", "date": "2027-04-10", "description": "Presidential election", "instability_impact": "medium"},
+    {"country": "India", "iso3": "IND", "election_type": "general", "date": "2029-04-01", "description": "General election (projected)", "instability_impact": "medium"},
+]
+
+
+def get_election_risk(iso3: str) -> dict | None:
+    """Return the next upcoming election for a country with days_until."""
+    from datetime import date
+
+    today = date.today()
+    upper = iso3.upper()
+    best: dict | None = None
+    best_days: int = 999999
+
+    for entry in UPCOMING_ELECTIONS:
+        if entry["iso3"] != upper:
+            continue
+        try:
+            election_date = date.fromisoformat(entry["date"])
+        except ValueError:
+            continue
+        days_until = (election_date - today).days
+        if days_until < best_days:
+            best_days = days_until
+            best = {**entry, "days_until": days_until}
+
+    return best
+
+
+# ---------------------------------------------------------------------------
+# Nuclear test sites
+# ---------------------------------------------------------------------------
+
+NUCLEAR_TEST_SITES: list[dict] = [
+    {"name": "Punggye-ri", "country": "North Korea", "iso3": "PRK", "lat": 41.28, "lon": 129.08, "status": "active", "last_test": "2017-09-03", "notes": "DPRK primary test site, 6 tests conducted"},
+    {"name": "Lop Nur", "country": "China", "iso3": "CHN", "lat": 41.75, "lon": 88.35, "status": "dormant", "last_test": "1996-07-29", "notes": "Chinese test site, 45 tests"},
+    {"name": "Novaya Zemlya", "country": "Russia", "iso3": "RUS", "lat": 73.37, "lon": 54.78, "status": "dormant", "last_test": "1990-10-24", "notes": "Soviet/Russian arctic test site, Tsar Bomba"},
+    {"name": "Nevada NTS", "country": "United States", "iso3": "USA", "lat": 37.07, "lon": -116.05, "status": "dormant_reference", "last_test": "1992-09-23", "notes": "US primary test site, 928 tests"},
+    {"name": "Semipalatinsk", "country": "Kazakhstan", "iso3": "KAZ", "lat": 50.07, "lon": 78.43, "status": "closed", "last_test": "1989-10-19", "notes": "Soviet test site, 456 tests, closed 1991"},
+]

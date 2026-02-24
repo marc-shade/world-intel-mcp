@@ -3,7 +3,7 @@
 World Intelligence MCP Server
 ==============================
 
-Real-time global intelligence across 17 domains:
+Real-time global intelligence across 23 domains:
 financial markets, economic indicators, earthquakes, wildfires,
 conflict, military flights, infrastructure, and more.
 
@@ -13,6 +13,7 @@ Phase 3: News, Intelligence, Prediction, Displacement, Aviation, Cyber (+9 = 33 
 Phase 4: Reports — daily brief, country dossier, threat landscape (+3 = 36 tools).
 Phase 5: Analysis — focal points, signal summary, temporal anomalies, CII v2 (+3 = 39 tools).
 Phase 6: Military & infrastructure intelligence (+6 = 45 tools).
+Phase 7: Health, sanctions, elections, shipping, social, nuclear, alerts, trends (+10 = 55 tools).
 """
 
 import asyncio
@@ -28,7 +29,7 @@ from mcp.types import Tool, TextContent
 from .cache import Cache
 from .circuit_breaker import CircuitBreaker
 from .fetcher import Fetcher
-from .sources import markets, economic, seismology, wildfire, conflict, military, infrastructure, maritime, climate, news, intelligence, prediction, displacement, aviation, cyber
+from .sources import markets, economic, seismology, wildfire, conflict, military, infrastructure, maritime, climate, news, intelligence, prediction, displacement, aviation, cyber, space_weather, ai_watch, health, sanctions, elections, shipping, social, nuclear
 from .reports import generator as report_gen
 
 logging.basicConfig(
@@ -480,6 +481,99 @@ TOOLS: list[Tool] = [
             },
         },
     ),
+    # --- Space Weather (1 tool) ---
+    Tool(
+        name="intel_space_weather",
+        description="Get solar activity: Kp geomagnetic index, X-ray flare class, solar wind, and SWPC alerts from NOAA.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    # --- AI Watch (1 tool) ---
+    Tool(
+        name="intel_ai_releases",
+        description="Track AI/AGI developments from arXiv, HuggingFace, and AI news feeds. Lab mention trending.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max items (default 50)", "default": 50},
+            },
+        },
+    ),
+    # --- Health (1 tool) ---
+    Tool(
+        name="intel_disease_outbreaks",
+        description="Aggregate disease outbreak alerts from WHO DON, ProMED, and CIDRAP. Flags high-concern pathogens (Ebola, H5N1, mpox, etc.).",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max items (default 50)", "default": 50},
+            },
+        },
+    ),
+    # --- Sanctions (1 tool) ---
+    Tool(
+        name="intel_sanctions_search",
+        description="Search the US Treasury OFAC Specially Designated Nationals (SDN) sanctions list. Substring match on name, country, program.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Name substring to search"},
+                "country": {"type": "string", "description": "Country filter"},
+                "program": {"type": "string", "description": "Sanctions program filter"},
+                "limit": {"type": "integer", "description": "Max results (default 50)", "default": 50},
+            },
+        },
+    ),
+    # --- Elections (1 tool) ---
+    Tool(
+        name="intel_election_calendar",
+        description="Get upcoming global election calendar with proximity-based instability risk scoring. Covers 2025-2029.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "country": {"type": "string", "description": "ISO-3 code or country name filter"},
+            },
+        },
+    ),
+    # --- Shipping (1 tool) ---
+    Tool(
+        name="intel_shipping_index",
+        description="Compute shipping stress index from dry bulk ETFs (BDRY, SBLK, EGLE, ZIM). Stress score 0-100.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    # --- Social (1 tool) ---
+    Tool(
+        name="intel_social_signals",
+        description="Monitor geopolitical discussion velocity on Reddit (r/worldnews, r/geopolitics). Engagement metrics and trending posts.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max posts per subreddit (default 25)", "default": 25},
+            },
+        },
+    ),
+    # --- Nuclear (1 tool) ---
+    Tool(
+        name="intel_nuclear_monitor",
+        description="Monitor seismic activity near 5 known nuclear test sites (Punggye-ri, Lop Nur, Novaya Zemlya, Nevada NTS, Semipalatinsk). Concern scoring based on depth, magnitude, distance.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "hours": {"type": "integer", "description": "Lookback hours (default 72)", "default": 72},
+            },
+        },
+    ),
+    # --- Alert Digest (1 tool) ---
+    Tool(
+        name="intel_alert_digest",
+        description="Cross-domain alert aggregation from 7 intelligence sources: space weather, instability, military surge, cable health, hotspot escalation, internet outages, shipping stress. Threshold-based prioritized alerts.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    # --- Weekly Trends (1 tool) ---
+    Tool(
+        name="intel_weekly_trends",
+        description="Analyze weekly trends from temporal baselines. Reports volatility (coefficient of variation) and current anomalies across all tracked metrics.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
     # --- System (1 tool) ---
     Tool(
         name="intel_status",
@@ -651,6 +745,60 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
                 fetcher, corridor=arguments.get("corridor"),
             )
 
+        # Space Weather
+        case "intel_space_weather":
+            return await space_weather.fetch_space_weather(fetcher)
+
+        # AI Watch
+        case "intel_ai_releases":
+            return await ai_watch.fetch_ai_watch(fetcher, limit=arguments.get("limit", 50))
+
+        # Health
+        case "intel_disease_outbreaks":
+            return await health.fetch_disease_outbreaks(fetcher, limit=arguments.get("limit", 50))
+
+        # Sanctions
+        case "intel_sanctions_search":
+            return await sanctions.fetch_sanctions_search(
+                fetcher,
+                query=arguments.get("query", ""),
+                country=arguments.get("country"),
+                program=arguments.get("program"),
+                limit=arguments.get("limit", 50),
+            )
+
+        # Elections
+        case "intel_election_calendar":
+            return await elections.fetch_election_calendar(
+                fetcher, country=arguments.get("country"),
+            )
+
+        # Shipping
+        case "intel_shipping_index":
+            return await shipping.fetch_shipping_index(fetcher)
+
+        # Social
+        case "intel_social_signals":
+            return await social.fetch_social_signals(
+                fetcher, limit=arguments.get("limit", 25),
+            )
+
+        # Nuclear
+        case "intel_nuclear_monitor":
+            return await nuclear.fetch_nuclear_monitor(
+                fetcher, hours=arguments.get("hours", 72),
+            )
+
+        # Alert Digest
+        case "intel_alert_digest":
+            from .analysis.alerts import fetch_alert_digest
+            return await fetch_alert_digest(fetcher)
+
+        # Weekly Trends
+        case "intel_weekly_trends":
+            from .analysis.alerts import fetch_weekly_trends
+            return await fetch_weekly_trends(fetcher)
+
         # Reports
         case "intel_daily_brief":
             return await report_gen.generate_daily_brief(output_dir=arguments.get("output_dir"))
@@ -682,6 +830,14 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
                     "displacement": ["unhcr"],
                     "aviation": ["faa"],
                     "cyber": ["feodo-tracker", "cisa-kev", "sans-dshield", "urlhaus"],
+                    "space_weather": ["noaa-swpc"],
+                    "ai_watch": ["arxiv", "huggingface", "ai-news-rss"],
+                    "health": ["who-don", "promed", "cidrap"],
+                    "sanctions": ["ofac-sdn"],
+                    "elections": ["election-calendar"],
+                    "shipping": ["yahoo-finance"],
+                    "social": ["reddit-public"],
+                    "nuclear": ["usgs-nuclear-monitor"],
                 },
             }
 
