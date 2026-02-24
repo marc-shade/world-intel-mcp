@@ -66,6 +66,9 @@ a { color: var(--accent); text-decoration: none; }
 /* ═══════════════ MAP ═══════════════ */
 #map { position: fixed; inset: 0; z-index: 1; }
 .leaflet-container { background: var(--bg) !important; }
+.leaflet-control-zoom {
+    margin-bottom: 50px !important; /* clear bottom ticker */
+}
 .leaflet-control-zoom a {
     background: var(--panel) !important; color: var(--accent) !important;
     border-color: var(--border) !important; backdrop-filter: blur(12px);
@@ -276,26 +279,25 @@ a { color: var(--accent); text-decoration: none; }
 
 /* ═══════════════ ALERT BANNER ═══════════════ */
 #alertBanner {
-    position: fixed; top: 54px; left: 10px; right: 360px; z-index: 45;
+    position: fixed; top: 54px; left: 220px; right: 360px; z-index: 45;
     max-height: 0; overflow: hidden; transition: max-height 0.4s var(--ease);
 }
-#alertBanner.show { max-height: 120px; }
-#alertBanner.show + #layers { top: 108px; }
+#alertBanner.show { max-height: 90px; }
 .alert-strip {
-    display: flex; align-items: center; gap: 10px;
-    padding: 6px 14px; border-radius: 8px; margin-bottom: 4px;
-    font-family: var(--mono); font-size: 0.68rem;
+    display: flex; align-items: center; gap: 8px;
+    padding: 3px 10px; border-radius: 6px; margin-bottom: 3px;
+    font-family: var(--mono); font-size: 0.58rem;
     background: rgba(255,59,59,0.06); border: 1px solid rgba(255,59,59,0.12);
 }
 .alert-strip.critical { background: rgba(255,59,59,0.1); border-color: rgba(255,59,59,0.2); }
 .alert-strip.high { background: rgba(255,159,28,0.08); border-color: rgba(255,159,28,0.15); }
 .alert-strip.medium { background: rgba(77,168,255,0.06); border-color: rgba(77,168,255,0.1); }
-.alert-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; animation: pulse-dot 2s ease-in-out infinite; }
+.alert-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; animation: pulse-dot 2s ease-in-out infinite; }
 .alert-strip.critical .alert-dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
 .alert-strip.high .alert-dot { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
 .alert-strip.medium .alert-dot { background: var(--blue); box-shadow: 0 0 4px var(--blue); }
-.alert-msg { flex: 1; color: var(--bright); }
-.alert-domain { color: var(--dim); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
+.alert-msg { flex: 1; color: var(--bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.alert-domain { color: var(--dim); font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
 
 /* ═══════════════ RISK BAR ═══════════════ */
 .risk-bar { position: relative; height: 6px; background: rgba(255,255,255,0.04); border-radius: 3px; margin: 2px 0; overflow: hidden; }
@@ -388,6 +390,7 @@ a { color: var(--accent); text-decoration: none; }
     #detail { width: 100%; }
     #layers { width: 160px; }
     .hud-stats { display: none; }
+    #alertBanner { left: 10px; right: 10px; }
 }
     </style>
 </head>
