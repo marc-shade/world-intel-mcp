@@ -155,13 +155,14 @@ async def fetch_ucdp_events(
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=days)
 
-    # Fetch page 1 to discover total pages
+    # Fetch page 1 to discover total pages (UCDP is slow — 30s timeout)
     page1_data = await fetcher.get_json(
         _UCDP_GED_URL,
         source="ucdp",
         cache_key=f"conflict:ucdp:{days}:page1",
         cache_ttl=21600,
         params={"pagesize": min(limit, 1000), "page": 0},
+        timeout=30.0,
     )
 
     if page1_data is None:
@@ -187,6 +188,7 @@ async def fetch_ucdp_events(
                 cache_key=f"conflict:ucdp:{days}:page{p}",
                 cache_ttl=21600,
                 params={"pagesize": min(limit, 1000), "page": p},
+                timeout=30.0,
             )
             for p in range(1, total_pages)
         ]

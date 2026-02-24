@@ -1,7 +1,7 @@
 [project]
 name = "world-intel-mcp"
 version = "0.1.0"
-description = "World Intelligence MCP Server - real-time global intelligence across 17 domains"
+description = "World Intelligence MCP Server - real-time global intelligence across 23 domains with 55 MCP tools"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -21,6 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dashboard = ["starlette>=0.37.0", "uvicorn>=0.29.0"]
 pdf = ["weasyprint>=62.0"]
 dev = [
     "pytest>=8.0.0",
@@ -32,6 +33,7 @@ dev = [
 [project.scripts]
 world-intel-mcp = "world_intel_mcp.server:run"
 intel = "world_intel_mcp.cli:main"
+intel-dashboard = "world_intel_mcp.dashboard.app:run"
 
 [build-system]
 requires = ["hatchling"]

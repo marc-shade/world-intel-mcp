@@ -149,50 +149,134 @@ def _point_in_corridor(
 
 
 # ---------------------------------------------------------------------------
+# IODA fallback (Georgia Tech Internet Intelligence — public, no auth)
+# ---------------------------------------------------------------------------
+
+_IODA_OUTAGES_URL = "https://api.ioda.inetintel.cc.gatech.edu/v2/outages/overall"
+
+
+async def _fetch_ioda_outages(fetcher: Fetcher) -> dict | None:
+    """Fallback: fetch recent internet outages from IODA public API.
+
+    Returns a dict matching the fetch_internet_outages output shape,
+    or None if IODA is also unavailable.
+    """
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=7)
+
+    data = await fetcher.get_json(
+        url=_IODA_OUTAGES_URL,
+        source="ioda",
+        cache_key="infra:outages:ioda",
+        cache_ttl=300,
+        params={
+            "from": int(since.timestamp()),
+            "until": int(now.timestamp()),
+            "limit": 20,
+        },
+        timeout=15.0,
+    )
+
+    if data is None:
+        return None
+
+    # IODA returns {"data": [{"entity": {...}, "events": [...]}]}
+    raw_items = data if isinstance(data, list) else data.get("data", [])
+    if not isinstance(raw_items, list):
+        return None
+
+    outages: list[dict] = []
+    ongoing_count = 0
+
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+
+        entity = item.get("entity", {}) if isinstance(item.get("entity"), dict) else {}
+        events = item.get("events", []) if isinstance(item.get("events"), list) else [item]
+
+        for ev in events:
+            if not isinstance(ev, dict):
+                continue
+            start = ev.get("from") or ev.get("start")
+            end = ev.get("until") or ev.get("end")
+            is_ongoing = end is None
+
+            if is_ongoing:
+                ongoing_count += 1
+
+            outages.append({
+                "id": ev.get("id") or entity.get("code"),
+                "start": start,
+                "end": end,
+                "description": ev.get("summary", entity.get("name", "")),
+                "scope": ev.get("level", "unknown"),
+                "countries": [entity.get("code", "")] if entity.get("code") else [],
+                "asns": [],
+                "is_ongoing": is_ongoing,
+            })
+
+    return {
+        "outages": outages,
+        "ongoing_count": ongoing_count,
+        "total_7d": len(outages),
+        "source": "ioda-gatech",
+        "timestamp": _utc_now_iso(),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Internet Outages (Cloudflare Radar)
 # ---------------------------------------------------------------------------
 
 async def fetch_internet_outages(fetcher: Fetcher) -> dict:
     """Fetch recent internet outage annotations from Cloudflare Radar.
 
-    Uses the public Radar annotations API for the last 7 days.  If the
-    ``CLOUDFLARE_API_TOKEN`` environment variable is set, authenticated
-    requests are made which may yield higher rate limits.
+    Tries authenticated Cloudflare Radar API first (requires
+    ``CLOUDFLARE_API_TOKEN``).  Falls back to IODA (Georgia Tech
+    Internet Intelligence) public API for internet outage signals.
 
     Returns:
         Dict with outages list, ongoing/total counts, source, and timestamp.
     """
     token = os.environ.get("CLOUDFLARE_API_TOKEN")
-
-    headers: dict[str, str] | None = None
-    if token:
-        headers = {"Authorization": f"Bearer {token}"}
-
-    params = {
-        "limit": 20,
-        "dateRange": "7d",
-    }
-
-    data = await fetcher.get_json(
-        url=_CF_RADAR_OUTAGES_URL,
-        source="cloudflare-radar",
-        cache_key="infra:outages",
-        cache_ttl=300,
-        headers=headers,
-        params=params,
-    )
-
     now_iso = _utc_now_iso()
 
+    data = None
+
+    # --- Attempt 1: Cloudflare Radar (requires token) ---
+    if token:
+        headers = {"Authorization": f"Bearer {token}"}
+        data = await fetcher.get_json(
+            url=_CF_RADAR_OUTAGES_URL,
+            source="cloudflare-radar",
+            cache_key="infra:outages:cf",
+            cache_ttl=300,
+            headers=headers,
+            params={"limit": 20, "dateRange": "7d"},
+        )
+
+    # --- Attempt 2: IODA public API (no auth needed) ---
     if data is None:
-        logger.warning("Cloudflare Radar outages API returned no data")
-        return {
+        data = await _fetch_ioda_outages(fetcher)
+        if data is not None:
+            return data  # IODA already returns our output shape
+
+    if data is None:
+        note = "Set CLOUDFLARE_API_TOKEN for detailed outage data" if not token else None
+        logger.warning("Internet outages: no data from Cloudflare or IODA")
+        result: dict = {
             "outages": [],
             "ongoing_count": 0,
             "total_7d": 0,
             "source": "cloudflare-radar",
             "timestamp": now_iso,
         }
+        if note:
+            result["note"] = note
+        return result
 
     outages: list[dict] = []
 

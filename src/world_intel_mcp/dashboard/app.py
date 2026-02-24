@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from starlette.applications import Starlette
-from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
+from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from world_intel_mcp.cache import Cache
@@ -205,6 +205,55 @@ async def api_health(request):
     return JSONResponse({"status": "ok"})
 
 
+async def api_report_pdf(request):
+    """Generate a PDF daily brief report.
+
+    Renders the daily_brief.html template with live data, then converts
+    to PDF via weasyprint.  Requires ``pip install world-intel-mcp[pdf]``.
+    """
+    try:
+        from weasyprint import HTML as WeasyHTML
+    except ImportError:
+        return JSONResponse(
+            {"error": "weasyprint not installed — run: pip install world-intel-mcp[pdf]"},
+            status_code=501,
+        )
+
+    from world_intel_mcp.reports.html_report import render_template
+
+    data = await _fetch_overview()
+
+    context = {
+        "title": "Daily Intelligence Brief",
+        "generated_at": data.get("timestamp", ""),
+        "market_quotes": data.get("market_quotes", {}),
+        "crypto_quotes": data.get("crypto_quotes", {}),
+        "macro_signals": data.get("macro_signals", {}),
+        "earthquakes": data.get("earthquakes", {}),
+        "cyber_threats": data.get("cyber_threats", {}),
+        "news_feed": data.get("news_feed", {}),
+        "military_flights": data.get("military_flights", {}),
+        "internet_outages": data.get("internet_outages", {}),
+        "climate_anomalies": data.get("climate_anomalies", {}),
+        "displacement": data.get("displacement", {}),
+        "risk_scores": data.get("risk_scores", {}),
+        "alert_digest": data.get("alert_digest", {}),
+    }
+
+    html_str = render_template("daily_brief.html", context)
+    pdf_bytes = WeasyHTML(string=html_str).write_pdf()
+
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="intel-brief-{now_str}.pdf"',
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
@@ -215,6 +264,7 @@ app = Starlette(
         Route("/api/overview", api_overview),
         Route("/api/stream", api_stream),
         Route("/api/health", api_health),
+        Route("/api/report/pdf", api_report_pdf),
     ],
 )
 
