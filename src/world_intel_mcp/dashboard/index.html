@@ -1035,7 +1035,10 @@ function updateMapFires(data) {
             mk.addTo(mapLayers.fires);
         });
     }
-    $('#cntFires').textContent = data.total_fires || total;
+    var clusterCount = mapLayers.fires.getLayers().length;
+    // Show cluster count for sidebar (what's on the map), full total in tooltip
+    $('#cntFires').textContent = clusterCount;
+    $('#cntFires').title = (data.total_fires || total) + ' individual fire detections';
 }
 
 function updateMapConvergence(data) {
@@ -1176,17 +1179,24 @@ function updateMapInfra(data) {
     });
     // Submarine cable corridors (shaded rectangles)
     var cables = (data.cable_corridors && data.cable_corridors.corridors) || [];
+    var cableStyle = { color: '#4da8ff', weight: 1, opacity: 0.2, fillColor: '#4da8ff', fillOpacity: 0.04, dashArray: '4 3', className: 'cable-corridor' };
     cables.forEach(function(c) {
         if (!c.lat_range || !c.lon_range) return;
         total++;
-        var bounds = [[c.lat_range[0], c.lon_range[0]], [c.lat_range[1], c.lon_range[1]]];
-        var rect = L.rectangle(bounds, {
-            color: '#4da8ff', weight: 1, opacity: 0.2,
-            fillColor: '#4da8ff', fillOpacity: 0.04,
-            dashArray: '4 3', className: 'cable-corridor'
-        });
-        rect.bindTooltip('<b>' + esc(c.name.replace(/_/g, ' ')) + '</b><br><span style="opacity:0.7">' + (c.cables || []).join(', ') + '</span>', { className: 'mk-tip', sticky: true });
-        rect.addTo(mapLayers.infra);
+        var tip = '<b>' + esc(c.name.replace(/_/g, ' ')) + '</b><br><span style="opacity:0.7">' + (c.cables || []).join(', ') + '</span>';
+        // Handle antimeridian crossing (lon_start > lon_end means wrapping past 180)
+        if (c.lon_range[0] > c.lon_range[1]) {
+            var r1 = L.rectangle([[c.lat_range[0], c.lon_range[0]], [c.lat_range[1], 180]], cableStyle);
+            var r2 = L.rectangle([[c.lat_range[0], -180], [c.lat_range[1], c.lon_range[1]]], cableStyle);
+            r1.bindTooltip(tip, { className: 'mk-tip', sticky: true });
+            r2.bindTooltip(tip, { className: 'mk-tip', sticky: true });
+            r1.addTo(mapLayers.infra);
+            r2.addTo(mapLayers.infra);
+        } else {
+            var rect = L.rectangle([[c.lat_range[0], c.lon_range[0]], [c.lat_range[1], c.lon_range[1]]], cableStyle);
+            rect.bindTooltip(tip, { className: 'mk-tip', sticky: true });
+            rect.addTo(mapLayers.infra);
+        }
     });
     $('#cntInfra').textContent = total;
 }
