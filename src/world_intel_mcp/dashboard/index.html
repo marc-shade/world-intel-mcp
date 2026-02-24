@@ -1275,8 +1275,10 @@ function updateHudStats(data) {
         pills.push('<div class="stat-pill"><span class="v">' + ((data.cyber_threats.threats || []).length) + '</span><span class="l">Cyber IOC</span></div>');
     }
     if (data.wildfires && !data.wildfires.error) {
-        var fc = data.wildfires.total_fires || 0;
-        pills.push('<div class="stat-pill"><span class="v' + (fc > 500 ? ' crit' : fc > 100 ? ' warn' : '') + '">' + fc + '</span><span class="l">Fires</span></div>');
+        var fbr = data.wildfires.fires_by_region || {};
+        var fireClusterCount = 0;
+        for (var rr in fbr) { if (fbr.hasOwnProperty(rr)) fireClusterCount += (fbr[rr].top_clusters || []).length; }
+        pills.push('<div class="stat-pill"><span class="v' + (fireClusterCount > 500 ? ' crit' : fireClusterCount > 100 ? ' warn' : '') + '">' + fireClusterCount + '</span><span class="l">Fires</span></div>');
     }
     if (data.displacement && !data.displacement.error && data.displacement.global_totals) {
         pills.push('<div class="stat-pill"><span class="v warn">' + fmtBigPlain(data.displacement.global_totals.grand_total || 0) + '</span><span class="l">Displaced</span></div>');
