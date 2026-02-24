@@ -17,6 +17,7 @@ Phase 7: Health, sanctions, elections, shipping, social, nuclear, alerts, trends
 Phase 8: Service status monitoring, RSS expansion (80+ feeds, 14 categories) (+1 = 56 tools).
 Phase 9: Geospatial datasets — military bases, ports, pipelines, nuclear facilities (+4 = 60 tools).
 Phase 10: NLP intelligence — entity extraction, event classification, news clustering, keyword spikes (+4 = 64 tools).
+Phase 11: Strategic synthesis — strategic posture, world brief, fleet report, population exposure (+4 = 68 tools).
 """
 
 import asyncio
@@ -681,6 +682,37 @@ TOOLS: list[Tool] = [
             },
         },
     ),
+    # --- Strategic Synthesis (4 tools) ---
+    Tool(
+        name="intel_strategic_posture",
+        description="Composite global risk assessment from 9 intelligence domains: military, political, conflict, infrastructure, economic, cyber, health, climate, space. Weighted composite score 0-100 with per-domain breakdown and top threats.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="intel_world_brief",
+        description="Structured daily intelligence summary: risk overview, focal areas, top story clusters, temporal anomalies, and trending threats. Comprehensive situational awareness in one call.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="intel_fleet_report",
+        description="Naval fleet activity report aggregating theater posture (5 theaters), vessel snapshot (9 waterways), military surge detections, and naval base count. Readiness scoring.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="intel_population_exposure",
+        description="Estimate population at risk near active events (earthquakes, wildfires, conflict). Finds major cities within radius and sums exposed population.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "radius_km": {"type": "number", "description": "Search radius in km (default: 200)", "default": 200},
+                "event_types": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["earthquake", "wildfire", "conflict"]},
+                    "description": "Event types to include (default: all three)",
+                },
+            },
+        },
+    ),
     # --- System (1 tool) ---
     Tool(
         name="intel_status",
@@ -948,6 +980,24 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
                 status=arguments.get("status"),
             )
 
+        # Strategic Synthesis
+        case "intel_strategic_posture":
+            from .analysis.posture import fetch_strategic_posture
+            return await fetch_strategic_posture(fetcher)
+        case "intel_world_brief":
+            from .analysis.world_brief import fetch_world_brief
+            return await fetch_world_brief(fetcher)
+        case "intel_fleet_report":
+            from .sources.fleet import fetch_fleet_report
+            return await fetch_fleet_report(fetcher)
+        case "intel_population_exposure":
+            from .analysis.exposure import fetch_population_exposure
+            return await fetch_population_exposure(
+                fetcher,
+                radius_km=arguments.get("radius_km", 200),
+                event_types=arguments.get("event_types"),
+            )
+
         # NLP Intelligence
         case "intel_extract_entities":
             from .analysis.entities import fetch_entity_extraction
@@ -1002,6 +1052,7 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
                     "service_status": ["aws", "azure", "gcp", "cloudflare", "github"],
                     "geospatial": ["static-datasets (bases, ports, pipelines, nuclear)"],
                     "nlp": ["regex-ner", "keyword-classifier", "jaccard-clustering", "keyword-spike-detector"],
+                    "synthesis": ["strategic-posture", "world-brief", "fleet-report", "population-exposure"],
                 },
             }
 

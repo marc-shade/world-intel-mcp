@@ -2,7 +2,7 @@
 
 **Benchmark**: [koala73/worldmonitor](https://github.com/koala73/worldmonitor)
 **Updated**: 2026-02-24
-**Current tools**: 64 (63 intel + 1 status)
+**Current tools**: 68 (67 intel + 1 status)
 
 ---
 
@@ -114,6 +114,14 @@
 | `intel_sanctions_search` | OFAC SDN search | :white_check_mark: |
 | `intel_nuclear_facilities` | Static dataset (24 facilities) | :white_check_mark: |
 
+### Strategic Synthesis (4 tools)
+| Tool | WM Equivalent | Status |
+|------|---------------|--------|
+| `intel_strategic_posture` | Composite 9-domain risk assessment | :white_check_mark: |
+| `intel_world_brief` | Structured daily intelligence summary | :white_check_mark: |
+| `intel_fleet_report` | Naval fleet activity report | :white_check_mark: |
+| `intel_population_exposure` | Population near active events | :white_check_mark: |
+
 ### Specialist (3 tools)
 | Tool | WM Equivalent | Status |
 |------|---------------|--------|
@@ -141,6 +149,7 @@
 | Strategic waterways | 8 chokepoints | config/countries.py | :white_check_mark: |
 | Nuclear test sites | 5 sites with monitoring | config/countries.py | :white_check_mark: |
 | Countries config | 22 nations with risk baselines | config/countries.py | :white_check_mark: |
+| Major cities | 105 cities (pop > 2M, 1B coverage) | config/population.py | :white_check_mark: |
 | Undersea cables | Cable routes with landing points | — | :red_circle: |
 | AI datacenters | Major clusters globally | — | :red_circle: |
 | Spaceports | Launch facilities worldwide | — | :red_circle: |
@@ -181,9 +190,9 @@ Expanded from 20 to **80+ feeds** across **15+ categories** with 4-tier source r
 |---|---------|----------|--------|
 | 1 | **Country stock index lookup** — ticker for any country's main index | P2 | S |
 | 2 | **Aircraft details batch** — batch lookup by multiple ICAO24 codes | P3 | S |
-| 3 | **USNI fleet report** — US Navy fleet disposition from USNI News | P2 | M |
+| 3 | **USNI fleet tracker** — US Navy fleet disposition from USNI News | P2 | M |
 | 4 | **Wingbits ADS-B** — crowd-sourced ADS-B coverage | P3 | S |
-| 5 | **Population exposure** — population near conflict/disaster zones | P2 | M |
+| 5 | ~~**Population exposure**~~ — :white_check_mark: `intel_population_exposure` | — | — |
 | 6 | **Hacker News items** — top HN stories | P3 | S |
 | 7 | **Trending repos** — GitHub trending repos | P3 | S |
 | 8 | **arXiv papers** — recent AI/ML papers | P3 | S |
@@ -192,8 +201,8 @@ Expanded from 20 to **80+ feeds** across **15+ categories** with 4-tier source r
 ### Analysis Layers (P2-P3)
 | # | Feature | Priority | Effort |
 |---|---------|----------|--------|
-| 10 | **Strategic Posture Assessment** — composite risk from ALL modules | P2 | M |
-| 11 | **AI-Powered World Brief** — LLM-synthesized daily summary | P2 | M |
+| 10 | ~~**Strategic Posture Assessment**~~ — :white_check_mark: `intel_strategic_posture` | — | — |
+| 11 | ~~**World Brief**~~ — :white_check_mark: `intel_world_brief` (structured, data-driven) | — | — |
 | 12 | **USA Spending Tracker** — Federal contract data from USAspending.gov | P3 | S |
 
 ### Static Datasets (P3)
@@ -239,19 +248,23 @@ Cloud service status monitoring (Cloudflare/AWS/Azure/GCP). Static geospatial da
 `intel_extract_entities`, `intel_classify_event`, `intel_news_clusters`, `intel_keyword_spikes`
 Regex-based NER (28 leaders, 41 orgs, 25 companies, 36 APT groups, CVE extraction). Keyword-based threat classification into 14 categories with severity scoring. Jaccard similarity news clustering with keyword extraction. Welford's algorithm keyword spike detection against rolling baselines. Entity reference database in config/entities.py. No ML dependencies.
 
+### Phase 10: Strategic Synthesis (+4 = 68 tools)
+`intel_strategic_posture`, `intel_world_brief`, `intel_fleet_report`, `intel_population_exposure`
+Composite strategic posture assessment from 9 weighted domains (military, political, conflict, infrastructure, economic, cyber, health, climate, space). Structured world intelligence brief aggregating posture, focal points, news clusters, temporal anomalies, and keyword spikes. Naval fleet activity report combining theater posture, vessel snapshots, and surge detections. Population exposure analysis near active events using 105-city dataset (1B pop coverage).
+
 ---
 
 ## Next Phase
 
-### Phase 10: Strategic Synthesis
-**Goal**: Composite intelligence from all domains.
+### Phase 11: Data Expansion
+**Goal**: Fill remaining data gaps and static datasets.
 
-1. **Strategic posture assessment** — composite risk score from ALL modules
-2. **AI-powered world brief** — LLM-synthesized daily summary
-3. **USNI fleet report** — US Navy fleet disposition
-4. **Population exposure** — population near conflict/disaster zones
+1. **Country stock index lookup** — ticker for any country's main stock index
+2. **USNI fleet tracker** — US Navy fleet disposition scraping
+3. **Hacker News** — top HN stories via public API
+4. **Trending repos** — GitHub trending repositories
 
-New tools: `intel_strategic_posture`, `intel_world_brief`, `intel_fleet_report`, `intel_population_exposure`
+New tools: `intel_country_stocks`, `intel_usni_fleet`, `intel_hacker_news`, `intel_trending_repos`
 
 ---
 
@@ -259,10 +272,10 @@ New tools: `intel_strategic_posture`, `intel_world_brief`, `intel_fleet_report`,
 
 | Category | Have | Benchmark | Coverage |
 |----------|------|-----------|----------|
-| Data source tools | 64 | 42 | **152%** |
-| Analysis engines | 15 | 15 | **100%** |
-| Static datasets | 9 | 12 | 75% |
+| Data source tools | 68 | 42 | **162%** |
+| Analysis engines | 19 | 15 | **127%** |
+| Static datasets | 10 | 12 | 83% |
 | RSS feeds | 80+ | 150+ | 53% |
-| News intelligence | NER + classification + clustering + spike detection | ML clustering + NER + LLM classify + spike detection | **At parity** |
+| Strategic synthesis | Strategic posture + world brief + fleet report + population exposure | Dashboard-only | **Exceeds** |
 
-**Bottom line**: We now exceed WorldMonitor in both data source count (64 vs 42 tools, 152%) and analysis engine count (15 vs 15, 100%). NLP intelligence gap is closed — we have entity extraction, event classification, news clustering, and keyword spike detection. Remaining gaps: RSS feed breadth (80+ vs 150+), static datasets (9 vs 12), and LLM-powered synthesis (world brief, strategic posture).
+**Bottom line**: 68 tools across 27 domains, exceeding WorldMonitor benchmark by 62% in tool count and 27% in analysis engines. Strategic synthesis layer complete — composite risk assessment, structured intelligence briefs, fleet reporting, and population exposure analysis. Remaining gaps: RSS feed breadth (80+ vs 150+), static datasets (10 vs 12), a few niche data sources.

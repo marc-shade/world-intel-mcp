@@ -6,7 +6,7 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-green)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-Real-time global intelligence across **26 domains** with **64 MCP tools**, a live ops-center dashboard, CLI reports, and per-source circuit breakers. All data comes from free, public APIs — no paid subscriptions required.
+Real-time global intelligence across **27 domains** with **68 MCP tools**, a live ops-center dashboard, CLI reports, and per-source circuit breakers. All data comes from free, public APIs — no paid subscriptions required.
 
 > **Successor to threat-intel-mcp.** This project evolved from a focused threat intelligence server into a comprehensive world intelligence platform covering markets, geopolitics, climate, military, space weather, AI research, and more.
 
@@ -43,8 +43,9 @@ Real-time global intelligence across **26 domains** with **64 MCP tools**, a liv
 | **Reports** | 3 | Daily brief, country dossier, threat landscape |
 | **Cross-Domain Analysis** | 2 | Alert digest, weekly trends |
 | **NLP Intelligence** | 4 | Entity extraction, event classification, news clustering, keyword spikes |
+| **Strategic Synthesis** | 4 | Strategic posture, world brief, fleet report, population exposure |
 
-**Total: 64 tools** across 26 intelligence domains.
+**Total: 68 tools** across 27 intelligence domains.
 
 ---
 
@@ -172,8 +173,9 @@ src/world_intel_mcp/
     nuclear.py           # USGS seismic monitoring near 5 nuclear test sites
     geospatial.py        # Query wrappers for static geospatial datasets
     service_status.py    # Cloudflare, AWS, Azure, GCP service health
+    fleet.py             # Naval fleet activity report
 
-  analysis/              # Cross-domain analysis + NLP engines
+  analysis/              # Cross-domain analysis + NLP + strategic synthesis
     signals.py           # Signal convergence detection
     instability.py       # Country instability index (CII v2)
     focal_points.py      # Multi-signal focal point detection
@@ -186,11 +188,15 @@ src/world_intel_mcp/
     classifier.py        # Keyword-based event threat classification (14 categories)
     clustering.py        # Jaccard similarity news topic clustering
     spikes.py            # Keyword spike detection with Welford's algorithm
+    posture.py           # Strategic posture — composite 9-domain risk assessment
+    world_brief.py       # Structured daily intelligence summary
+    exposure.py          # Population exposure near active events
 
   config/                # Static configuration data
     countries.py         # 22 intel hotspots, election calendar, nuclear test sites
     geospatial.py        # 70 military bases, 40 ports, 24 pipelines, 24 nuclear facilities
     entities.py          # 28 leaders, 41 orgs, 25 companies, 36 APT groups
+    population.py        # 105 major cities (pop >2M) for exposure analysis
 
   reports/               # Report generation
     generator.py         # Report orchestrator
@@ -355,6 +361,14 @@ External APIs -> Fetcher (httpx + retries) -> Circuit Breaker -> Cache (TTL) -> 
 | `intel_classify_event` | Event classification into 14 threat categories with severity scoring (1-10) |
 | `intel_news_clusters` | Topic clustering of news articles by Jaccard similarity with keyword extraction |
 | `intel_keyword_spikes` | Keyword spike detection against baselines with CVE/APT mention extraction |
+
+### Strategic Synthesis (4 tools)
+| Tool | Description |
+|------|-------------|
+| `intel_strategic_posture` | Composite global risk from 9 weighted domains (military, political, conflict, infrastructure, economic, cyber, health, climate, space) |
+| `intel_world_brief` | Structured daily intelligence summary: risk overview, focal areas, top stories, anomalies, trending threats |
+| `intel_fleet_report` | Naval fleet activity: theater posture, waterway status, surge detections, readiness scoring |
+| `intel_population_exposure` | Population at risk near active earthquakes, wildfires, and conflict (105-city dataset, 1B pop coverage) |
 
 ### Cross-Domain Alerts (2 tools)
 | Tool | Description |
