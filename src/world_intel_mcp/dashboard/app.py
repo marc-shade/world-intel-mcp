@@ -35,7 +35,13 @@ from world_intel_mcp.sources import (
     intelligence,
     space_weather,
     ai_watch,
+    health,
+    elections,
+    shipping,
+    social,
+    nuclear,
 )
+from world_intel_mcp.analysis.alerts import fetch_alert_digest, fetch_weekly_trends
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +97,13 @@ async def _fetch_overview() -> dict:
         "signal_convergence": intelligence.fetch_signal_convergence(fetcher),
         "space_weather": space_weather.fetch_space_weather(fetcher),
         "ai_watch": ai_watch.fetch_ai_watch(fetcher),
+        "disease_outbreaks": health.fetch_disease_outbreaks(fetcher),
+        "election_calendar": elections.fetch_election_calendar(fetcher),
+        "shipping_index": shipping.fetch_shipping_index(fetcher),
+        "social_signals": social.fetch_social_signals(fetcher),
+        "nuclear_monitor": nuclear.fetch_nuclear_monitor(fetcher),
+        "alert_digest": fetch_alert_digest(fetcher),
+        "weekly_trends": fetch_weekly_trends(fetcher),
     }
 
     gathered = await asyncio.gather(

@@ -274,6 +274,43 @@ a { color: var(--accent); text-decoration: none; }
 .ticker-item .src { color: var(--dim); margin-left: 6px; }
 .ticker-item .sep { color: rgba(0,229,255,0.2); margin: 0 4px; }
 
+/* ═══════════════ ALERT BANNER ═══════════════ */
+#alertBanner {
+    position: fixed; top: 54px; left: 10px; right: 360px; z-index: 45;
+    max-height: 0; overflow: hidden; transition: max-height 0.4s var(--ease);
+}
+#alertBanner.show { max-height: 120px; }
+#alertBanner.show + #layers { top: 108px; }
+.alert-strip {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 14px; border-radius: 8px; margin-bottom: 4px;
+    font-family: var(--mono); font-size: 0.68rem;
+    background: rgba(255,59,59,0.06); border: 1px solid rgba(255,59,59,0.12);
+}
+.alert-strip.critical { background: rgba(255,59,59,0.1); border-color: rgba(255,59,59,0.2); }
+.alert-strip.high { background: rgba(255,159,28,0.08); border-color: rgba(255,159,28,0.15); }
+.alert-strip.medium { background: rgba(77,168,255,0.06); border-color: rgba(77,168,255,0.1); }
+.alert-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; animation: pulse-dot 2s ease-in-out infinite; }
+.alert-strip.critical .alert-dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
+.alert-strip.high .alert-dot { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.alert-strip.medium .alert-dot { background: var(--blue); box-shadow: 0 0 4px var(--blue); }
+.alert-msg { flex: 1; color: var(--bright); }
+.alert-domain { color: var(--dim); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
+
+/* ═══════════════ RISK BAR ═══════════════ */
+.risk-bar { position: relative; height: 6px; background: rgba(255,255,255,0.04); border-radius: 3px; margin: 2px 0; overflow: hidden; }
+.risk-fill { height: 100%; border-radius: 3px; transition: width 0.5s var(--ease); }
+.risk-fill.crit { background: linear-gradient(90deg, var(--red), #ff6666); }
+.risk-fill.high { background: linear-gradient(90deg, var(--amber), #ffcc66); }
+.risk-fill.med { background: linear-gradient(90deg, var(--blue), #80c4ff); }
+.risk-fill.low { background: linear-gradient(90deg, var(--green), #66e6b3); }
+
+/* ═══════════════ GAUGE ═══════════════ */
+.gauge-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; }
+.gauge-track { flex: 1; height: 8px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: hidden; }
+.gauge-fill { height: 100%; border-radius: 4px; transition: width 0.6s var(--ease), background 0.3s; }
+.gauge-label { font-family: var(--mono); font-size: 0.75rem; font-weight: 600; min-width: 32px; text-align: right; }
+
 /* ═══════════════ MAP MARKERS ═══════════════ */
 .mk-quake {
     border-radius: 50%;
@@ -315,6 +352,19 @@ a { color: var(--accent); text-decoration: none; }
     cursor: pointer; transition: border-color 0.2s, background 0.2s;
 }
 .mk-conv:hover { border-color: rgba(167,139,250,0.6); background: rgba(167,139,250,0.1); }
+.mk-nuclear {
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(52,211,153,0.8) 15%, rgba(52,211,153,0) 70%);
+    border: 2px solid rgba(52,211,153,0.5);
+    cursor: pointer; transition: transform 0.15s;
+    box-shadow: 0 0 6px rgba(52,211,153,0.3);
+}
+.mk-nuclear:hover { transform: scale(1.3); }
+.mk-nuclear.crit { animation: glow-green 1.8s ease-in-out infinite; }
+@keyframes glow-green {
+    0%,100% { box-shadow: 0 0 4px rgba(52,211,153,0.3); }
+    50% { box-shadow: 0 0 22px rgba(52,211,153,0.8); }
+}
 
 /* Leaflet tooltip override */
 .leaflet-tooltip.mk-tip {
@@ -370,6 +420,9 @@ a { color: var(--accent); text-decoration: none; }
     </div>
 </header>
 
+<!-- ALERT BANNER -->
+<div id="alertBanner" class="glass"></div>
+
 <!-- LAYER CONTROLS -->
 <aside id="layers" class="glass">
     <div class="panel-title">LAYERS</div>
@@ -402,6 +455,12 @@ a { color: var(--accent); text-decoration: none; }
         <span class="layer-label">Convergence</span>
         <span class="layer-count" id="cntConv">0</span>
         <div class="toggle on" style="--lc:var(--purple)"><div class="knob"></div></div>
+    </div>
+    <div class="layer-row" data-layer="nuclear">
+        <span class="layer-dot" style="background:var(--green)"></span>
+        <span class="layer-label">Nuclear Sites</span>
+        <span class="layer-count" id="cntNuclear">0</span>
+        <div class="toggle on" style="--lc:var(--green)"><div class="knob"></div></div>
     </div>
 </aside>
 
@@ -449,7 +508,7 @@ function ago(ts) { if (!ts) return '\u2014'; var s = Math.floor((Date.now() - ne
 var latestData = null;
 var map = null;
 var mapLayers = {};
-var layerState = { quakes: true, military: true, conflict: true, fires: true, convergence: true };
+var layerState = { quakes: true, military: true, conflict: true, fires: true, convergence: true, nuclear: true };
 var drawerOpen = false;
 
 // ════════════ MAP INIT ════════════
@@ -462,6 +521,7 @@ function initMap() {
     mapLayers.conflict = L.layerGroup().addTo(map);
     mapLayers.fires = L.layerGroup().addTo(map);
     mapLayers.convergence = L.layerGroup().addTo(map);
+    mapLayers.nuclear = L.layerGroup().addTo(map);
 }
 
 // ════════════ LAYER TOGGLES ════════════
@@ -486,8 +546,8 @@ $('#drawerToggle').addEventListener('click', function() {
 });
 
 // ════════════ DETAIL MODAL ════════════
-var COLORS = { earthquake: 'var(--red)', military: 'var(--blue)', conflict: 'var(--amber)', fire: 'var(--gold)', convergence: 'var(--purple)' };
-var LABELS = { earthquake: 'EARTHQUAKE', military: 'MILITARY AIRCRAFT', conflict: 'CONFLICT EVENT', fire: 'WILDFIRE CLUSTER', convergence: 'SIGNAL CONVERGENCE' };
+var COLORS = { earthquake: 'var(--red)', military: 'var(--blue)', conflict: 'var(--amber)', fire: 'var(--gold)', convergence: 'var(--purple)', nuclear: 'var(--green)' };
+var LABELS = { earthquake: 'EARTHQUAKE', military: 'MILITARY AIRCRAFT', conflict: 'CONFLICT EVENT', fire: 'WILDFIRE CLUSTER', convergence: 'SIGNAL CONVERGENCE', nuclear: 'NUCLEAR MONITOR' };
 
 function showDetail(type, d) {
     var title = '', subtitle = '', fields = [], link = '';
@@ -560,6 +620,20 @@ function showDetail(type, d) {
             }
         }
         if (d.lat != null) fields.push(['Coordinates', d.lat.toFixed(3) + ', ' + d.lon.toFixed(3)]);
+    } else if (type === 'nuclear') {
+        var cs = d.concern_score || 0;
+        title = (d.site || 'Unknown Site') + ' \u2014 M' + (d.magnitude || 0).toFixed(1);
+        subtitle = d.site_country || '';
+        fields = [
+            ['Concern Score', cs.toFixed(1), cs >= 70 ? 'crit' : cs >= 50 ? 'high' : cs >= 30 ? 'high' : ''],
+            ['Concern Level', d.concern_level || '\u2014', d.concern_level === 'critical' ? 'crit' : d.concern_level === 'high' ? 'high' : ''],
+            ['Magnitude', (d.magnitude || 0).toFixed(1)],
+            ['Depth', d.depth_km != null ? d.depth_km + ' km' : '\u2014', d.depth_km <= 5 ? 'high' : ''],
+            ['Distance to Site', d.distance_km != null ? d.distance_km + ' km' : '\u2014'],
+            ['Location', d.place || '\u2014'],
+            ['Time', d.time || '\u2014'],
+            ['Coordinates', d.latitude != null ? d.latitude.toFixed(3) + ', ' + d.longitude.toFixed(3) : '\u2014']
+        ];
     }
 
     var hdr = '<div class="detail-cat"><span class="detail-cat-dot" style="background:' + c + ';--cat-color:' + c + '"></span><span class="detail-cat-label">' + esc(LABELS[type] || type) + '</span></div>' +
@@ -679,6 +753,52 @@ function updateMapConvergence(data) {
     });
 }
 
+function updateMapNuclear(data) {
+    mapLayers.nuclear.clearLayers();
+    if (!data || data.error) { $('#cntNuclear').textContent = '0'; return; }
+    var sites = data.sites || [];
+    var flagged = 0;
+    sites.forEach(function(site) {
+        if (site.lat == null || site.lon == null) return;
+        var evts = site.events_detected || 0;
+        flagged += evts;
+        var highest = site.highest_concern;
+        var isCrit = highest && highest.concern_level === 'critical';
+        var size = evts > 0 ? Math.max(14, Math.min(24, evts * 3 + 10)) : 10;
+        var mk = L.marker([site.lat, site.lon], {
+            icon: L.divIcon({ className: 'mk-nuclear' + (isCrit ? ' crit' : ''), iconSize: [size, size], iconAnchor: [size/2, size/2] })
+        });
+        var tip = esc(site.name) + ' (' + esc(site.status) + ')';
+        if (evts > 0) tip += ' \u2014 ' + evts + ' events';
+        mk.bindTooltip(tip, { className: 'mk-tip', direction: 'top', offset: [0, -size/2] });
+        mk.on('click', function() {
+            if (highest) { showDetail('nuclear', highest); }
+        });
+        mk.addTo(mapLayers.nuclear);
+    });
+    $('#cntNuclear').textContent = flagged;
+}
+
+function updateAlertBanner(data) {
+    var el = $('#alertBanner');
+    if (!data || data.error || !data.alerts || !data.alerts.length) {
+        el.classList.remove('show');
+        el.textContent = '';
+        return;
+    }
+    var alerts = data.alerts.slice(0, 3);
+    var html = alerts.map(function(a) {
+        var p = a.priority || 'medium';
+        return '<div class="alert-strip ' + esc(p) + '">' +
+            '<span class="alert-dot"></span>' +
+            '<span class="alert-msg">' + esc(a.message || '') + '</span>' +
+            '<span class="alert-domain">' + esc(a.domain || '') + '</span>' +
+            '</div>';
+    }).join('');
+    el.innerHTML = safe(html);
+    el.classList.add('show');
+}
+
 // ════════════ TOP BAR STATS ════════════
 
 function updateHudStats(data) {
@@ -711,6 +831,22 @@ function updateHudStats(data) {
     if (data.ai_watch && !data.ai_watch.error) {
         pills.push('<div class="stat-pill"><span class="v">' + (data.ai_watch.count || 0) + '</span><span class="l">AI Papers</span></div>');
     }
+    if (data.alert_digest && !data.alert_digest.error && data.alert_digest.alert_count > 0) {
+        var ac = data.alert_digest.alert_count;
+        var hasCrit = (data.alert_digest.by_priority || {}).critical > 0;
+        pills.push('<div class="stat-pill"><span class="v' + (hasCrit ? ' crit' : ' warn') + '">' + ac + '</span><span class="l">Alerts</span></div>');
+    }
+    if (data.shipping_index && !data.shipping_index.error) {
+        var ss = data.shipping_index.stress_score || 0;
+        pills.push('<div class="stat-pill"><span class="v' + (ss >= 60 ? ' crit' : ss >= 30 ? ' warn' : '') + '">' + ss + '</span><span class="l">Ship Stress</span></div>');
+    }
+    if (data.disease_outbreaks && !data.disease_outbreaks.error) {
+        var hc = data.disease_outbreaks.high_concern_count || 0;
+        if (hc > 0) pills.push('<div class="stat-pill"><span class="v crit">' + hc + '</span><span class="l">Outbreak</span></div>');
+    }
+    if (data.nuclear_monitor && !data.nuclear_monitor.error && data.nuclear_monitor.critical_flags > 0) {
+        pills.push('<div class="stat-pill"><span class="v crit">' + data.nuclear_monitor.critical_flags + '</span><span class="l">Nuke Flag</span></div>');
+    }
     $('#hudStats').innerHTML = safe(pills.join(''));
 }
 
@@ -718,6 +854,26 @@ function updateHudStats(data) {
 
 function updateDrawer(data) {
     var h = '';
+
+    // ── ALERTS ──
+    if (data.alert_digest && !data.alert_digest.error && data.alert_digest.alert_count > 0) {
+        h += '<div class="sh">ALERTS</div>';
+        var byPri = data.alert_digest.by_priority || {};
+        h += '<div class="mini-row">';
+        if (byPri.critical) h += '<div class="mini-box"><div class="v" style="color:var(--red)">' + byPri.critical + '</div><div class="l">Critical</div></div>';
+        if (byPri.high) h += '<div class="mini-box"><div class="v" style="color:var(--amber)">' + byPri.high + '</div><div class="l">High</div></div>';
+        if (byPri.medium) h += '<div class="mini-box"><div class="v" style="color:var(--blue)">' + byPri.medium + '</div><div class="l">Medium</div></div>';
+        h += '</div>';
+        var alertItems = data.alert_digest.alerts || [];
+        alertItems.forEach(function(a) {
+            var pc = a.priority === 'critical' ? 'down' : a.priority === 'high' ? 'warn' : 'dim';
+            h += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.02)">';
+            h += '<span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:' + (a.priority === 'critical' ? 'var(--red)' : a.priority === 'high' ? 'var(--amber)' : 'var(--blue)') + '"></span>';
+            h += '<span style="flex:1;font-size:0.68rem;color:var(--bright)">' + esc(a.message || '') + '</span>';
+            h += '<span class="dim" style="font-size:0.56rem;text-transform:uppercase;letter-spacing:0.5px">' + esc(a.domain || '') + '</span>';
+            h += '</div>';
+        });
+    }
 
     // ── MARKETS ──
     h += '<div class="sh">MARKETS</div>';
@@ -1003,6 +1159,159 @@ function updateDrawer(data) {
         h += '<div class="dim" style="font-size:0.7rem;padding:4px 0">Loading AI feeds...</div>';
     }
 
+    // ── HEALTH ──
+    if (data.disease_outbreaks && !data.disease_outbreaks.error) {
+        var dob = data.disease_outbreaks;
+        h += '<div class="sh">HEALTH</div>';
+        h += '<div class="mini-row">';
+        h += '<div class="mini-box"><div class="v">' + (dob.count || 0) + '</div><div class="l">Alerts</div></div>';
+        h += '<div class="mini-box"><div class="v' + ((dob.high_concern_count || 0) > 0 ? ' crit' : '') + '">' + (dob.high_concern_count || 0) + '</div><div class="l">High Concern</div></div>';
+        h += '</div>';
+        var byOrg = dob.by_organization || {};
+        if (Object.keys(byOrg).length) {
+            h += '<div class="mini-row">';
+            for (var orgK in byOrg) {
+                if (byOrg.hasOwnProperty(orgK)) {
+                    h += '<div class="mini-box"><div class="v">' + byOrg[orgK] + '</div><div class="l">' + esc(orgK) + '</div></div>';
+                }
+            }
+            h += '</div>';
+        }
+        var healthItems = dob.items || [];
+        if (healthItems.length) {
+            h += '<table class="dtable"><thead><tr><th>Outbreak</th><th>Org</th><th>Age</th></tr></thead><tbody>';
+            healthItems.slice(0, 12).forEach(function(item) {
+                var isHigh = item.high_concern;
+                h += '<tr><td' + (isHigh ? ' class="down"' : '') + '>' + esc(trunc(item.title || '?', 40)) + '</td><td class="dim">' + esc(item.organization || '\u2014') + '</td><td class="dim">' + ago(item.published) + '</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+    }
+
+    // ── ELECTIONS ──
+    if (data.election_calendar && !data.election_calendar.error) {
+        var ecal = data.election_calendar;
+        var elections = ecal.elections || [];
+        if (elections.length) {
+            h += '<div class="sh">ELECTIONS</div>';
+            var hiRisk = ecal.highest_risk;
+            if (hiRisk) {
+                h += '<div class="mini-row"><div class="mini-box"><div class="v warn">' + fmtNum(hiRisk.risk_score || 0, 0) + '</div><div class="l">Top Risk</div></div>';
+                h += '<div class="mini-box"><div class="v">' + esc(hiRisk.country || '?') + '</div><div class="l">' + esc(hiRisk.election_type || '') + '</div></div></div>';
+            }
+            h += '<table class="dtable"><thead><tr><th>Country</th><th>Type</th><th>Date</th><th>Risk</th></tr></thead><tbody>';
+            elections.slice(0, 12).forEach(function(e) {
+                var rs = e.risk_score || 0;
+                var rCls = rs >= 80 ? 'crit' : rs >= 50 ? 'high' : rs >= 30 ? 'high' : '';
+                var riskPct = Math.min(100, rs);
+                h += '<tr><td class="bright">' + esc(e.country || '?') + '</td><td class="dim">' + esc(e.election_type || '\u2014') + '</td><td class="dim">' + esc(e.date || '\u2014') + '</td><td>' +
+                    '<div class="risk-bar"><div class="risk-fill ' + (rs >= 80 ? 'crit' : rs >= 50 ? 'high' : rs >= 20 ? 'med' : 'low') + '" style="width:' + riskPct + '%"></div></div>' +
+                    '</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+    }
+
+    // ── SHIPPING ──
+    if (data.shipping_index && !data.shipping_index.error) {
+        var ship = data.shipping_index;
+        h += '<div class="sh">SHIPPING</div>';
+        var stress = ship.stress_score || 0;
+        var stressColor = stress >= 60 ? 'var(--red)' : stress >= 30 ? 'var(--amber)' : 'var(--green)';
+        h += '<div class="gauge-row">';
+        h += '<span style="font-size:0.68rem;color:var(--dim)">Stress</span>';
+        h += '<div class="gauge-track"><div class="gauge-fill" style="width:' + stress + '%;background:' + stressColor + '"></div></div>';
+        h += '<span class="gauge-label" style="color:' + stressColor + '">' + stress + '</span>';
+        h += '</div>';
+        h += '<div class="mini-row"><div class="mini-box"><div class="v">' + esc(ship.assessment || '\u2014') + '</div><div class="l">Assessment</div></div></div>';
+        var sigs = ship.signals || [];
+        if (sigs.length) {
+            h += '<div class="tags">';
+            sigs.forEach(function(s) { h += '<span class="tag tag-hot">' + esc(s) + '</span>'; });
+            h += '</div>';
+        }
+        var shipQuotes = ship.quotes || [];
+        if (shipQuotes.length) {
+            h += '<table class="dtable"><thead><tr><th>Sym</th><th>Price</th><th>%</th></tr></thead><tbody>';
+            shipQuotes.forEach(function(q) {
+                h += '<tr><td class="bright">' + esc(q.symbol || '?') + '</td><td>' + fmtNum(q.price) + '</td><td class="' + cls(q.change_pct) + '">' + fmtPct(q.change_pct) + '%</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+    }
+
+    // ── SOCIAL ──
+    if (data.social_signals && !data.social_signals.error) {
+        var soc = data.social_signals;
+        h += '<div class="sh">SOCIAL</div>';
+        var vel = soc.velocity_metrics || {};
+        if (Object.keys(vel).length) {
+            h += '<div class="mini-row">';
+            for (var vk in vel) {
+                if (vel.hasOwnProperty(vk)) {
+                    h += '<div class="mini-box"><div class="v">' + (typeof vel[vk] === 'number' ? fmtNum(vel[vk], 0) : esc(String(vel[vk]))) + '</div><div class="l">' + esc(vk.replace(/_/g, ' ')) + '</div></div>';
+                }
+            }
+            h += '</div>';
+        }
+        var posts = soc.posts || [];
+        if (posts.length) {
+            h += '<table class="dtable"><thead><tr><th>Post</th><th>Score</th><th>Sub</th></tr></thead><tbody>';
+            posts.slice(0, 10).forEach(function(p) {
+                h += '<tr><td><a href="' + esc(p.url || '#') + '" target="_blank">' + esc(trunc(p.title || '?', 35)) + '</a></td><td class="bright">' + fmtBigPlain(p.score || 0) + '</td><td class="dim">' + esc(p.subreddit || '\u2014') + '</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+    }
+
+    // ── NUCLEAR ──
+    if (data.nuclear_monitor && !data.nuclear_monitor.error) {
+        var nuc = data.nuclear_monitor;
+        h += '<div class="sh">NUCLEAR MONITOR</div>';
+        h += '<div class="mini-row">';
+        h += '<div class="mini-box"><div class="v">' + (nuc.total_flagged_events || 0) + '</div><div class="l">Flagged</div></div>';
+        h += '<div class="mini-box"><div class="v' + ((nuc.critical_flags || 0) > 0 ? ' crit' : '') + '">' + (nuc.critical_flags || 0) + '</div><div class="l">Critical</div></div>';
+        h += '<div class="mini-box"><div class="v">' + ((nuc.sites || []).length) + '</div><div class="l">Sites</div></div>';
+        h += '</div>';
+        var nucSites = nuc.sites || [];
+        if (nucSites.length) {
+            h += '<table class="dtable"><thead><tr><th>Site</th><th>Status</th><th>Events</th><th>Concern</th></tr></thead><tbody>';
+            nucSites.forEach(function(s) {
+                var concern = s.highest_concern ? s.highest_concern.concern_level : 'none';
+                var cc = concern === 'critical' ? 'down' : concern === 'high' ? 'warn' : concern === 'elevated' ? 'warn' : 'dim';
+                h += '<tr><td class="bright">' + esc(s.name || '?') + '</td><td class="dim">' + esc(s.status || '\u2014') + '</td><td>' + (s.events_detected || 0) + '</td><td class="' + cc + '">' + esc(concern) + '</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+    }
+
+    // ── TRENDS ──
+    if (data.weekly_trends && !data.weekly_trends.error) {
+        var wt = data.weekly_trends;
+        h += '<div class="sh">TRENDS</div>';
+        h += '<div class="mini-row">';
+        h += '<div class="mini-box"><div class="v">' + (wt.trend_count || 0) + '</div><div class="l">Metrics</div></div>';
+        h += '<div class="mini-box"><div class="v' + ((wt.current_anomaly_count || 0) > 0 ? ' warn' : '') + '">' + (wt.current_anomaly_count || 0) + '</div><div class="l">Anomalies</div></div>';
+        h += '</div>';
+        var anomalies = wt.current_anomalies || [];
+        if (anomalies.length) {
+            h += '<div class="sub">Active Anomalies</div><table class="dtable"><thead><tr><th>Metric</th><th>Region</th><th>Dev</th></tr></thead><tbody>';
+            anomalies.slice(0, 10).forEach(function(a) {
+                var dev = a.z_score || a.deviation || 0;
+                h += '<tr><td class="bright">' + esc(a.event_type || a.metric || '?') + '</td><td class="dim">' + esc(a.region || '\u2014') + '</td><td class="' + (Math.abs(dev) > 3 ? 'down' : Math.abs(dev) > 2 ? 'warn' : 'dim') + '">' + (dev > 0 ? '+' : '') + fmtNum(dev, 1) + '\u03C3</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+        var trends = wt.trends || [];
+        if (trends.length) {
+            h += '<div class="sub">Most Volatile</div><table class="dtable"><thead><tr><th>Metric</th><th>CV%</th><th>Mean</th></tr></thead><tbody>';
+            trends.slice(0, 8).forEach(function(t) {
+                h += '<tr><td class="bright">' + esc(t.metric || '?') + '</td><td class="' + (t.volatility_cv > 50 ? 'warn' : 'dim') + '">' + fmtNum(t.volatility_cv, 1) + '</td><td class="dim">' + fmtNum(t.mean, 1) + '</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+    }
+
     $('#drawerBody').innerHTML = safe(h);
 }
 
@@ -1035,6 +1344,10 @@ function updateAll(data) {
     updateMapConflict(data.acled_events);
     updateMapFires(data.wildfires);
     updateMapConvergence(data.signal_convergence);
+    updateMapNuclear(data.nuclear_monitor);
+
+    // Alert banner
+    updateAlertBanner(data.alert_digest);
 
     // HUD
     updateHudStats(data);
