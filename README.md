@@ -1,4 +1,4 @@
-<img width="1914" height="993" alt="Threat Intelligence MCP Server" src="https://github.com/user-attachments/assets/76ee1cdc-ece2-4b3c-8ffa-a0a127ab4b9b" />
+![Phoenix Intelligence Dashboard](docs/dashboard.png)
 
 # World Intelligence MCP Server
 
@@ -206,7 +206,7 @@ src/world_intel_mcp/
 
   dashboard/             # Live ops-center dashboard
     app.py               # Starlette app with SSE streaming (35+ feeds)
-    index.html           # Map-first dashboard UI (7 map layers, 12 drawer sections)
+    index.html           # Map-first dashboard UI (14 map layers, 20+ drawer sections)
 
   tests/                 # Test suite
     conftest.py          # Shared fixtures (mock fetcher, circuit breaker)
