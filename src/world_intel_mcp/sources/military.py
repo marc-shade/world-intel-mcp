@@ -19,6 +19,7 @@ logger = logging.getLogger("world-intel-mcp.sources.military")
 # ---------------------------------------------------------------------------
 
 _OPENSKY_STATES_URL = "https://opensky-network.org/api/states/all"
+_ADSBLOL_MIL_URL = "https://api.adsb.lol/v2/mil"
 _HEXDB_BASE_URL = "https://hexdb.io/api/v1/aircraft"
 
 # ICAO hex prefix ranges known to be allocated to military operators.
@@ -39,6 +40,39 @@ MILITARY_CALLSIGN_PREFIXES = [
     "IRON", "CASA", "NATO", "LAGR", "TEAL", "SAM", "EXEC",
     "SPAR", "VALOR", "BLADE",
 ]
+
+# ICAO hex prefix → country mapping for military aircraft.
+_ICAO_COUNTRY: list[tuple[str, str]] = [
+    ("AE", "United States"), ("A8", "United States"), ("A9", "United States"),
+    ("AA", "United States"), ("AB", "United States"), ("AC", "United States"),
+    ("AD", "United States"),
+    ("43C", "United Kingdom"), ("43D", "United Kingdom"),
+    ("43E", "United Kingdom"), ("43F", "United Kingdom"),
+    ("3F", "Germany"), ("3A8", "France"), ("3A9", "France"),
+    ("3AA", "France"), ("3AB", "France"),
+    ("500", "Israel"), ("501", "Israel"), ("502", "Israel"),
+    ("70", "Pakistan"), ("C0", "Canada"),
+    ("34", "Italy"), ("3C", "Germany"),
+    ("E4", "Brazil"), ("71", "Turkey"),
+    ("50", "Israel"), ("48", "Netherlands"),
+    ("44", "Austria"), ("45", "Belgium"),
+    ("46", "Bulgaria"), ("49", "Denmark"),
+    ("4A", "Finland"), ("39", "France"),
+    ("4B", "Greece"), ("4D", "Hungary"),
+    ("4C", "Ireland"), ("30", "Italy"),
+    ("73", "Japan"), ("78", "China"),
+    ("7C", "Australia"), ("C8", "Australia"),
+]
+
+
+def _icao_to_country(icao24: str) -> str:
+    """Derive country from ICAO24 hex address prefix."""
+    upper = icao24.upper()
+    # Try longest prefixes first for specificity
+    for prefix, country in sorted(_ICAO_COUNTRY, key=lambda x: -len(x[0])):
+        if upper.startswith(prefix):
+            return country
+    return ""
 
 # Theater bounding boxes for global military posture assessment.
 THEATERS = {
@@ -110,19 +144,45 @@ def _extract_aircraft(state: list) -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
-async def fetch_military_flights(
-    fetcher: Fetcher,
-    bbox: str | None = None,
-) -> dict:
-    """Fetch current military aircraft positions from the OpenSky Network.
+async def _fetch_adsblol_military(fetcher: Fetcher) -> list[dict] | None:
+    """Fetch military aircraft from adsb.lol free API (pre-filtered)."""
+    data = await fetcher.get_json(
+        url=_ADSBLOL_MIL_URL,
+        source="adsblol",
+        cache_key="military:adsblol:mil",
+        cache_ttl=300,
+    )
+    if data is None:
+        return None
 
-    Args:
-        fetcher: Shared HTTP fetcher with caching and circuit breaking.
-        bbox: Optional bounding box as "lamin,lomin,lamax,lomax".
+    aircraft: list[dict] = []
+    for ac in data.get("ac") or []:
+        lat = ac.get("lat")
+        lon = ac.get("lon")
+        if lat is None or lon is None:
+            continue
+        icao24 = ac.get("hex", "")
+        aircraft.append({
+            "icao24": icao24,
+            "callsign": (ac.get("flight") or "").strip() or None,
+            "origin_country": _icao_to_country(icao24),
+            "latitude": lat,
+            "longitude": lon,
+            "altitude_m": ac.get("alt_baro"),
+            "velocity_ms": ac.get("gs"),
+            "heading": ac.get("track"),
+            "on_ground": ac.get("alt_baro") == "ground",
+            "squawk": ac.get("squawk"),
+            "aircraft_type": ac.get("t"),
+            "registration": ac.get("r"),
+        })
+    return aircraft
 
-    Returns:
-        Dict with aircraft list, count, filter description, source, and timestamp.
-    """
+
+async def _fetch_opensky_military(
+    fetcher: Fetcher, bbox: str | None = None,
+) -> list[dict] | None:
+    """Fetch military aircraft from OpenSky (requires filtering)."""
     params: dict[str, str] = {}
     if bbox is not None:
         parts = bbox.split(",")
@@ -139,39 +199,81 @@ async def fetch_military_flights(
         url=_OPENSKY_STATES_URL,
         source="opensky",
         cache_key=f"military:flights:{cache_label}",
-        cache_ttl=120,
+        cache_ttl=300,
         headers=headers,
         params=params if params else None,
     )
 
     if data is None:
-        logger.warning("OpenSky API returned no data (bbox=%s)", cache_label)
+        return None
+
+    states = data.get("states") or []
+    aircraft: list[dict] = []
+    for state in states:
+        if not state or len(state) < 17:
+            continue
+        icao24 = state[0] or ""
+        callsign = state[1] or ""
+        if _is_military_icao(icao24) or _is_military_callsign(callsign):
+            aircraft.append(_extract_aircraft(state))
+    return aircraft
+
+
+async def fetch_military_flights(
+    fetcher: Fetcher,
+    bbox: str | None = None,
+) -> dict:
+    """Fetch current military aircraft positions.
+
+    Tries adsb.lol (free, pre-filtered military endpoint) first,
+    falls back to OpenSky Network if unavailable.
+
+    Args:
+        fetcher: Shared HTTP fetcher with caching and circuit breaking.
+        bbox: Optional bounding box as "lamin,lomin,lamax,lomax" (OpenSky only).
+
+    Returns:
+        Dict with aircraft list, count, filter description, source, and timestamp.
+    """
+    # Primary: adsb.lol (free, dedicated military endpoint, no filtering needed)
+    aircraft = await _fetch_adsblol_military(fetcher)
+    if aircraft is not None and len(aircraft) > 0:
+        # Apply bbox filter client-side if requested
+        if bbox is not None:
+            parts = bbox.split(",")
+            if len(parts) == 4:
+                la_min, lo_min, la_max, lo_max = map(float, parts)
+                aircraft = [
+                    a for a in aircraft
+                    if a["latitude"] is not None and a["longitude"] is not None
+                    and la_min <= a["latitude"] <= la_max
+                    and lo_min <= a["longitude"] <= lo_max
+                ]
         return {
-            "aircraft": [],
-            "count": 0,
+            "aircraft": aircraft,
+            "count": len(aircraft),
+            "military_filter": "adsblol_mil_endpoint",
+            "source": "adsb.lol",
+            "timestamp": _utc_now_iso(),
+        }
+
+    # Fallback: OpenSky Network
+    logger.debug("adsb.lol unavailable, trying OpenSky")
+    aircraft = await _fetch_opensky_military(fetcher, bbox)
+    if aircraft is not None:
+        return {
+            "aircraft": aircraft,
+            "count": len(aircraft),
             "military_filter": "icao_prefix+callsign",
             "source": "opensky",
             "timestamp": _utc_now_iso(),
         }
 
-    states = data.get("states") or []
-    military_aircraft: list[dict] = []
-
-    for state in states:
-        if not state or len(state) < 17:
-            continue
-
-        icao24 = state[0] or ""
-        callsign = state[1] or ""
-
-        if _is_military_icao(icao24) or _is_military_callsign(callsign):
-            military_aircraft.append(_extract_aircraft(state))
-
     return {
-        "aircraft": military_aircraft,
-        "count": len(military_aircraft),
+        "aircraft": [],
+        "count": 0,
         "military_filter": "icao_prefix+callsign",
-        "source": "opensky",
+        "source": "none",
         "timestamp": _utc_now_iso(),
     }
 

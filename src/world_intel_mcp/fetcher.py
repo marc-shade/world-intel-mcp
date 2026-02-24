@@ -31,6 +31,7 @@ _SOURCE_RATE_LIMITS: dict[str, float] = {
     "cloudflare-radar": 3.0,    # 20 req/min
     "reddit": 1.5,              # ~60 req/min (be conservative)
     "nasa-firms": 2.0,          # API key: ~1000 req/day
+    "adsblol": 5.0,             # community API — be very polite
     "polymarket": 1.0,          # be polite
     "faa": 1.0,                 # govt API
     "usgs": 1.0,                # generous but be polite
