@@ -8,7 +8,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
     <style>
 /* ═══════════════ VARIABLES ═══════════════ */
@@ -464,6 +466,20 @@ a { color: var(--accent); text-decoration: none; }
     .hud-stats { display: none; }
     #alertBanner { left: 10px; right: 10px; }
 }
+/* ═══════════════ CLUSTER STYLES ═══════════════ */
+.marker-cluster-small, .marker-cluster-medium, .marker-cluster-large {
+    background: rgba(14,20,33,0.7); border: 1px solid rgba(255,255,255,0.15); border-radius: 50%;
+}
+.marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+    background: rgba(0,200,255,0.25); color: #8cf; font-size: 11px; font-weight: 600;
+    font-family: var(--mono); border-radius: 50%; width: 30px; height: 30px;
+    line-height: 30px; text-align: center; margin: 4px;
+}
+.marker-cluster-medium div { background: rgba(0,200,255,0.35); color: #5ef; }
+.marker-cluster-large div { background: rgba(0,200,255,0.5); color: #fff; }
+.cluster-conflict div { background: rgba(245,158,11,0.3) !important; color: var(--amber) !important; }
+.cluster-fire div { background: rgba(240,184,64,0.3) !important; color: var(--gold) !important; }
+.cluster-military div { background: rgba(96,165,250,0.3) !important; color: var(--blue) !important; }
     </style>
 </head>
 <body>
@@ -627,17 +643,29 @@ function initMap() {
     map = L.map('map', { zoomControl: false, attributionControl: false, worldCopyJump: true }).setView([20, 0], 2.5);
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(map);
+    var clusterOpts = function(cls, size) {
+        return {
+            maxClusterRadius: size || 40,
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            iconCreateFunction: function(cluster) {
+                var n = cluster.getChildCount();
+                var sz = n < 50 ? 'small' : n < 200 ? 'medium' : 'large';
+                return L.divIcon({ html: '<div>' + n + '</div>', className: 'marker-cluster marker-cluster-' + sz + (cls ? ' ' + cls : ''), iconSize: L.point(38, 38) });
+            }
+        };
+    };
     mapLayers.quakes = L.layerGroup().addTo(map);
-    mapLayers.military = L.layerGroup().addTo(map);
-    mapLayers.conflict = L.layerGroup().addTo(map);
-    mapLayers.fires = L.layerGroup().addTo(map);
+    mapLayers.military = L.markerClusterGroup(clusterOpts('cluster-military', 50)).addTo(map);
+    mapLayers.conflict = L.markerClusterGroup(clusterOpts('cluster-conflict', 45)).addTo(map);
+    mapLayers.fires = L.markerClusterGroup(clusterOpts('cluster-fire', 45)).addTo(map);
     mapLayers.convergence = L.layerGroup().addTo(map);
     mapLayers.nuclear = L.layerGroup().addTo(map);
     mapLayers.infra = L.layerGroup().addTo(map);
     mapLayers.exposure = L.layerGroup().addTo(map);
-    mapLayers.airtraffic = L.layerGroup().addTo(map);
+    mapLayers.airtraffic = L.markerClusterGroup(clusterOpts(null, 60)).addTo(map);
     mapLayers.traffic = L.layerGroup().addTo(map);
-    mapLayers.navwarnings = L.layerGroup().addTo(map);
+    mapLayers.navwarnings = L.markerClusterGroup(clusterOpts(null, 40)).addTo(map);
     mapLayers.webcams = L.layerGroup().addTo(map);
 }
 
@@ -1105,7 +1133,17 @@ document.addEventListener('click', function(e) {
 });
 
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') { closeDetail(); }
+    if (e.key === 'Escape') {
+        closeDetail();
+        var dr = document.getElementById('drawer');
+        if (dr) dr.classList.remove('open');
+    }
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'd' || e.key === 'D') {
+        var dr = document.getElementById('drawer');
+        if (dr) dr.classList.toggle('open');
+    }
+    if (e.key === 'r' || e.key === 'R') { map.setView([20, 0], 2.5); }
 });
 
 // ════════════ MAP MARKER MANAGEMENT ════════════
@@ -1334,23 +1372,16 @@ function updateMapInfra(data) {
     });
     // Submarine cable corridors (shaded rectangles)
     var cables = (data.cable_corridors && data.cable_corridors.corridors) || [];
-    var cableStyle = { color: '#4da8ff', weight: 1, opacity: 0.2, fillColor: '#4da8ff', fillOpacity: 0.04, dashArray: '4 3', className: 'cable-corridor' };
+    var cableStyle = { color: '#4da8ff', weight: 1, opacity: 0.2, fillColor: '#4da8ff', fillOpacity: 0.04, dashArray: '4 3', className: 'cable-corridor', interactive: false };
     cables.forEach(function(c) {
         if (!c.lat_range || !c.lon_range) return;
         total++;
-        var tip = '<b>' + esc(c.name.replace(/_/g, ' ')) + '</b><br><span style="opacity:0.7">' + (c.cables || []).join(', ') + '</span>';
         // Handle antimeridian crossing (lon_start > lon_end means wrapping past 180)
         if (c.lon_range[0] > c.lon_range[1]) {
-            var r1 = L.rectangle([[c.lat_range[0], c.lon_range[0]], [c.lat_range[1], 180]], cableStyle);
-            var r2 = L.rectangle([[c.lat_range[0], -180], [c.lat_range[1], c.lon_range[1]]], cableStyle);
-            r1.bindTooltip(tip, { className: 'mk-tip', sticky: true });
-            r2.bindTooltip(tip, { className: 'mk-tip', sticky: true });
-            r1.addTo(mapLayers.infra);
-            r2.addTo(mapLayers.infra);
+            L.rectangle([[c.lat_range[0], c.lon_range[0]], [c.lat_range[1], 180]], cableStyle).addTo(mapLayers.infra);
+            L.rectangle([[c.lat_range[0], -180], [c.lat_range[1], c.lon_range[1]]], cableStyle).addTo(mapLayers.infra);
         } else {
-            var rect = L.rectangle([[c.lat_range[0], c.lon_range[0]], [c.lat_range[1], c.lon_range[1]]], cableStyle);
-            rect.bindTooltip(tip, { className: 'mk-tip', sticky: true });
-            rect.addTo(mapLayers.infra);
+            L.rectangle([[c.lat_range[0], c.lon_range[0]], [c.lat_range[1], c.lon_range[1]]], cableStyle).addTo(mapLayers.infra);
         }
     });
     $('#cntInfra').textContent = total;
@@ -1393,6 +1424,7 @@ function updateMapAirTraffic(data) {
     if (!data || data.error) { $('#cntAirTraffic').textContent = '0'; return; }
     var positions = data.positions || [];
     $('#cntAirTraffic').textContent = data.total_aircraft || positions.length;
+    var markers = [];
     positions.forEach(function(p) {
         if (p.lat == null || p.lon == null) return;
         var mk = L.marker([p.lat, p.lon], {
@@ -1402,8 +1434,9 @@ function updateMapAirTraffic(data) {
         if (p.alt) tip += ' @ ' + p.alt + 'm';
         mk.bindTooltip(tip, { className: 'mk-tip', direction: 'top', offset: [0, -3] });
         mk.on('click', function() { showDetail('airtraffic', p); });
-        mk.addTo(mapLayers.airtraffic);
+        markers.push(mk);
     });
+    mapLayers.airtraffic.addLayers(markers);
 }
 
 function updateMapTraffic(data) {
