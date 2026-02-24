@@ -79,8 +79,8 @@ def _parse_fires_csv(csv_text: str) -> list[dict]:
         if len(fields) <= max(idx_lat, idx_lon, idx_conf):
             continue
 
-        confidence = fields[idx_conf].strip()
-        if confidence.lower() not in ("high", "h"):
+        confidence = fields[idx_conf].strip().lower()
+        if confidence in ("low", "l"):
             continue
 
         try:
@@ -171,7 +171,7 @@ async def fetch_wildfires(
 
     async def _fetch_region(region_name: str, bbox: str) -> tuple[str, list[dict] | None]:
         """Fetch fires for a single region, return (name, fires_list_or_None)."""
-        url = f"{_FIRMS_BASE_URL}/{key}/VIIRS_SNPP_NRT/{bbox}/1"
+        url = f"{_FIRMS_BASE_URL}/{key}/VIIRS_SNPP_NRT/{bbox}/2"
 
         csv_text = await fetcher.get_text(
             url=url,

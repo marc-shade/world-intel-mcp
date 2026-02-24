@@ -1,6 +1,8 @@
 """Async HTTP fetcher with timeout, retry, rate limiting, and circuit breaker integration.
 
 All external HTTP calls in world-intel-mcp go through this module.
+Stale-data fallback: when an API call fails, the last-known-good cached
+response is returned (marked with _stale=True) so dashboards never go blank.
 """
 
 import asyncio
@@ -19,6 +21,24 @@ logger = logging.getLogger("world-intel-mcp.fetcher")
 _yahoo_lock = asyncio.Lock()
 _yahoo_last_call: float = 0.0
 _YAHOO_MIN_INTERVAL = 0.6  # seconds
+
+# Per-source rate limits (min seconds between calls).
+# Sources not listed here have no enforced limit.
+_SOURCE_RATE_LIMITS: dict[str, float] = {
+    "yahoo-finance": 0.6,       # unofficial — ~100 req/min safe
+    "opensky": 6.0,             # free tier: 10 req/min
+    "coingecko": 2.0,           # free tier: 30 calls/min
+    "cloudflare-radar": 3.0,    # 20 req/min
+    "reddit": 1.5,              # ~60 req/min (be conservative)
+    "nasa-firms": 2.0,          # API key: ~1000 req/day
+    "polymarket": 1.0,          # be polite
+    "faa": 1.0,                 # govt API
+    "usgs": 1.0,                # generous but be polite
+    "acled": 2.0,               # API key based
+    "nga": 2.0,                 # govt API
+}
+_source_locks: dict[str, asyncio.Lock] = {}
+_source_last_call: dict[str, float] = {}
 
 
 class Fetcher:
@@ -80,20 +100,21 @@ class Fetcher:
         Returns:
             Parsed JSON or None on failure.
         """
-        # Check circuit breaker
-        if not self.breaker.is_available(source):
-            logger.debug("Circuit open for %s, skipping", source)
-            return None
-
-        # Check cache
+        # Check cache (live)
         effective_key = cache_key or f"{source}:{url}:{params}"
         cached = self.cache.get(effective_key)
         if cached is not None:
             return cached
 
-        # Yahoo rate limiting
+        # Check circuit breaker — fall back to stale data if open
+        if not self.breaker.is_available(source):
+            logger.debug("Circuit open for %s, trying stale cache", source)
+            return self._stale_fallback(effective_key, source)
+
+        # Per-source rate limiting
         if yahoo_rate_limit:
             await self._yahoo_throttle()
+        await self._source_throttle(source)
 
         # Fetch with retries
         client = await self._get_client()
@@ -120,10 +141,10 @@ class Fetcher:
                                  attempt + 1, self.max_retries, source, exc, wait)
                     await asyncio.sleep(wait)
 
-        # All retries failed
+        # All retries failed — try stale cache before giving up
         self.breaker.record_failure(source)
         logger.warning("Fetch failed for %s: %s (url=%s)", source, last_error, url)
-        return None
+        return self._stale_fallback(effective_key, source)
 
     async def get_text(
         self,
@@ -136,13 +157,15 @@ class Fetcher:
         timeout: float | None = None,
     ) -> str | None:
         """Fetch raw text with caching and circuit breaking."""
-        if not self.breaker.is_available(source):
-            return None
-
         effective_key = cache_key or f"{source}:text:{url}:{params}"
         cached = self.cache.get(effective_key)
         if cached is not None:
             return cached
+
+        if not self.breaker.is_available(source):
+            return self._stale_fallback(effective_key, source)
+
+        await self._source_throttle(source)
 
         client = await self._get_client()
         last_error: Exception | None = None
@@ -167,7 +190,7 @@ class Fetcher:
 
         self.breaker.record_failure(source)
         logger.warning("Text fetch failed for %s: %s", source, last_error)
-        return None
+        return self._stale_fallback(effective_key, source)
 
     async def get_xml(
         self,
@@ -179,6 +202,28 @@ class Fetcher:
     ) -> str | None:
         """Fetch XML content (returns raw text for feedparser/ET parsing)."""
         return await self.get_text(url, source, cache_key, cache_ttl, timeout=timeout)
+
+    def _stale_fallback(self, cache_key: str, source: str) -> Any | None:
+        """Return stale (expired) cached data as last-known-good fallback."""
+        stale = self.cache.get_stale(cache_key)
+        if stale is not None:
+            logger.info("Serving stale cache for %s (key=%s)", source, cache_key)
+        return stale
+
+    async def _source_throttle(self, source: str) -> None:
+        """Enforce per-source rate limit from _SOURCE_RATE_LIMITS."""
+        min_interval = _SOURCE_RATE_LIMITS.get(source)
+        if min_interval is None:
+            return
+        if source not in _source_locks:
+            _source_locks[source] = asyncio.Lock()
+        async with _source_locks[source]:
+            now = time.time()
+            last = _source_last_call.get(source, 0.0)
+            elapsed = now - last
+            if elapsed < min_interval:
+                await asyncio.sleep(min_interval - elapsed)
+            _source_last_call[source] = time.time()
 
     async def _yahoo_throttle(self) -> None:
         """Enforce Yahoo Finance rate limit (600ms between calls)."""

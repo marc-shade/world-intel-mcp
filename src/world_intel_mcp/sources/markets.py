@@ -83,10 +83,17 @@ async def _fetch_yahoo_quote(fetcher: Fetcher, symbol: str, cache_key: str, cach
 
     try:
         meta = data["chart"]["result"][0]["meta"]
+        price = meta.get("regularMarketPrice")
+        change_pct = meta.get("regularMarketChangePercent")
+        # Yahoo v8 chart often omits regularMarketChangePercent — compute from previousClose
+        if change_pct is None and price is not None:
+            prev = meta.get("previousClose") or meta.get("chartPreviousClose")
+            if prev and prev > 0:
+                change_pct = round(((price - prev) / prev) * 100, 4)
         return {
             "symbol": symbol,
-            "price": meta.get("regularMarketPrice"),
-            "change_pct": meta.get("regularMarketChangePercent"),
+            "price": price,
+            "change_pct": change_pct,
             "currency": meta.get("currency"),
         }
     except (KeyError, IndexError, TypeError):

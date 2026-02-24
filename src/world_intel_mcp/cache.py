@@ -56,10 +56,18 @@ class Cache:
             return None
         value, expires_at = row
         if time.time() > expires_at:
-            conn.execute("DELETE FROM cache WHERE key = ?", (key,))
-            conn.commit()
             return None
         return json.loads(value)
+
+    def get_stale(self, key: str) -> Any | None:
+        """Get cached value even if expired (last-known-good fallback)."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT value FROM cache WHERE key = ?", (key,)
+        ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row[0])
 
     def set(self, key: str, value: Any, ttl_seconds: int) -> None:
         """Store a value with TTL in seconds."""

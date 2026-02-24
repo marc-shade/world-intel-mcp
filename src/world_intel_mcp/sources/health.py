@@ -22,9 +22,9 @@ logger = logging.getLogger("world-intel-mcp.sources.health")
 # ---------------------------------------------------------------------------
 
 _HEALTH_FEEDS: list[tuple[str, str]] = [
-    ("WHO DON", "https://www.who.int/feeds/entity/don/en/rss.xml"),
-    ("ProMED", "https://promedmail.org/feed/"),
-    ("CIDRAP", "https://www.cidrap.umn.edu/infectious-disease-topics/rss.xml"),
+    ("WHO", "https://www.who.int/rss-feeds/news-english.xml"),
+    ("CDC", "https://tools.cdc.gov/api/v2/resources/media/132608.rss"),
+    ("Outbreak News", "https://outbreaknewstoday.com/feed/"),
 ]
 
 HIGH_CONCERN_PATHOGENS: set[str] = {
