@@ -1,7 +1,7 @@
 [project]
 name = "world-intel-mcp"
 version = "0.1.0"
-description = "World Intelligence MCP Server - real-time global intelligence across 23 domains with 55 MCP tools"
+description = "World Intelligence MCP Server - real-time global intelligence across 25 domains with 60 MCP tools"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
