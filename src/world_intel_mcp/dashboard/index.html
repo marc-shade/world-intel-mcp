@@ -1314,6 +1314,16 @@ function updateHudStats(data) {
     if (data.population_exposure && !data.population_exposure.error && data.population_exposure.exposed_city_count > 0) {
         pills.push('<div class="stat-pill"><span class="v warn">' + (data.population_exposure.total_exposed_population_formatted || '0') + '</span><span class="l">Exposed</span></div>');
     }
+    if (data.domestic_flights && !data.domestic_flights.error && data.domestic_flights.total_aircraft > 0) {
+        pills.push('<div class="stat-pill"><span class="v">' + fmtBigPlain(data.domestic_flights.total_aircraft) + '</span><span class="l">Airborne</span></div>');
+    }
+    if (data.traffic_flow && !data.traffic_flow.error && data.traffic_flow.count > 0) {
+        var tAvg = data.traffic_flow.global_avg_congestion || 0;
+        pills.push('<div class="stat-pill"><span class="v' + (tAvg >= 40 ? ' crit' : tAvg >= 20 ? ' warn' : '') + '">' + tAvg.toFixed(0) + '%</span><span class="l">Traffic</span></div>');
+    }
+    if (data.webcams && !data.webcams.error && data.webcams.count > 0) {
+        pills.push('<div class="stat-pill"><span class="v">' + data.webcams.count + '</span><span class="l">Cams</span></div>');
+    }
     $('#hudStats').innerHTML = safe(pills.join(''));
 }
 
@@ -1929,6 +1939,68 @@ function updateDrawer(data) {
             });
             h += '</tbody></table>';
         }
+    }
+
+    // ── DOMESTIC AIR TRAFFIC ──
+    if (data.domestic_flights && !data.domestic_flights.error && data.domestic_flights.total_aircraft > 0) {
+        var df = data.domestic_flights;
+        h += '<div class="sh">AIR TRAFFIC</div>';
+        h += '<div class="mini-row"><div class="mini-box"><div class="v">' + fmtBigPlain(df.total_aircraft) + '</div><div class="l">Airborne</div></div></div>';
+        var regions = df.by_region || {};
+        h += '<table class="dtable"><thead><tr><th>Region</th><th>Total</th><th>Commercial</th><th>General</th></tr></thead><tbody>';
+        var rKeys = Object.keys(regions).sort(function(a, b) { return (regions[b].count || 0) - (regions[a].count || 0); });
+        rKeys.forEach(function(rk) {
+            var rv = regions[rk];
+            h += '<tr><td class="bright">' + esc(rk.replace(/_/g, ' ')) + '</td><td>' + (rv.count || 0) + '</td><td class="dim">' + (rv.commercial || 0) + '</td><td class="dim">' + (rv.general || 0) + '</td></tr>';
+        });
+        h += '</tbody></table>';
+        var busiest = df.busiest_origins || [];
+        if (busiest.length) {
+            h += '<div class="sub">Busiest Origins</div><table class="dtable"><thead><tr><th>Country</th><th>Aircraft</th></tr></thead><tbody>';
+            busiest.slice(0, 10).forEach(function(b) {
+                h += '<tr><td class="bright">' + esc(b.country) + '</td><td>' + b.count + '</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+    }
+
+    // ── TRAFFIC ──
+    if (data.traffic_flow && !data.traffic_flow.error && data.traffic_flow.count > 0) {
+        var tf = data.traffic_flow;
+        h += '<div class="sh">ROAD TRAFFIC</div>';
+        h += '<div class="mini-row">';
+        var avgCls = tf.global_avg_congestion >= 40 ? ' crit' : tf.global_avg_congestion >= 20 ? ' warn' : '';
+        h += '<div class="mini-box"><div class="v' + avgCls + '">' + fmtNum(tf.global_avg_congestion, 0) + '%</div><div class="l">Avg Congestion</div></div>';
+        h += '<div class="mini-box"><div class="v">' + tf.count + '</div><div class="l">Cities</div></div>';
+        h += '</div>';
+        h += '<table class="dtable"><thead><tr><th>City</th><th>Cong%</th><th>Speed</th></tr></thead><tbody>';
+        (tf.cities || []).forEach(function(c) {
+            var cls = c.congestion_pct >= 50 ? 'crit' : c.congestion_pct >= 25 ? 'warn' : 'dim';
+            h += '<tr><td class="bright">' + esc(c.name) + ' <span class="dim">' + c.country + '</span></td><td class="' + cls + '">' + c.congestion_pct + '%</td><td class="dim">' + c.current_speed_kmh + '</td></tr>';
+        });
+        h += '</tbody></table>';
+    }
+
+    // ── WEBCAMS ──
+    if (data.webcams && !data.webcams.error && data.webcams.count > 0) {
+        var wc = data.webcams;
+        h += '<div class="sh">CCTV / WEBCAMS</div>';
+        h += '<div class="dim" style="font-size:0.65rem;padding:2px 0">' + wc.count + ' cameras (' + esc(wc.category || 'traffic') + ')</div>';
+        (wc.cameras || []).slice(0, 12).forEach(function(cam) {
+            h += '<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04)">';
+            h += '<div class="bright" style="font-size:0.7rem">' + esc(cam.title || 'Camera') + '</div>';
+            h += '<div class="dim" style="font-size:0.6rem">' + esc(cam.city || '') + (cam.country ? ', ' + esc(cam.country) : '') + '</div>';
+            h += '</div>';
+        });
+    }
+
+    // ── AI SITUATION BRIEF ──
+    if (data.situation_brief && !data.situation_brief.error && data.situation_brief.brief) {
+        var sb = data.situation_brief;
+        h += '<div class="sh">AI SITUATION BRIEF</div>';
+        var aiTag = sb.ai_generated ? '<span style="color:var(--purple);font-size:0.55rem;font-weight:600;letter-spacing:0.5px"> ' + esc(sb.model) + '</span>' : '<span class="dim" style="font-size:0.55rem"> metrics fallback</span>';
+        h += '<div style="font-size:0.6rem;padding:2px 0;opacity:0.5">Generated ' + ago(new Date(sb.timestamp).getTime()) + ' ago ' + aiTag + '</div>';
+        h += '<div style="font-size:0.7rem;line-height:1.5;padding:4px 0;white-space:pre-wrap;color:rgba(255,255,255,0.85)">' + esc(sb.brief) + '</div>';
     }
 
     $('#drawerBody').innerHTML = safe(h);

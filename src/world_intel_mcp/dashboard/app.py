@@ -41,10 +41,13 @@ from world_intel_mcp.sources import (
     social,
     nuclear,
     service_status,
+    traffic,
+    webcams,
 )
 from world_intel_mcp.analysis.alerts import fetch_alert_digest, fetch_weekly_trends
 from world_intel_mcp.analysis.posture import fetch_strategic_posture
 from world_intel_mcp.analysis.exposure import fetch_population_exposure
+from world_intel_mcp.analysis.situation import fetch_situation_brief
 from world_intel_mcp.sources.fleet import fetch_fleet_report
 from world_intel_mcp.config.countries import INTEL_HOTSPOTS, STRATEGIC_WATERWAYS
 from world_intel_mcp.config.geospatial import MILITARY_BASES, STRATEGIC_PORTS, PIPELINES, NUCLEAR_FACILITIES
@@ -115,6 +118,10 @@ async def _fetch_overview() -> dict:
         "strategic_posture": fetch_strategic_posture(fetcher),
         "fleet_report": fetch_fleet_report(fetcher),
         "population_exposure": fetch_population_exposure(fetcher),
+        "domestic_flights": aviation.fetch_domestic_flights(fetcher),
+        "traffic_flow": traffic.fetch_traffic_flow(fetcher),
+        "traffic_incidents": traffic.fetch_traffic_incidents(fetcher),
+        "webcams": webcams.fetch_webcams(fetcher),
     }
 
     # Per-coro timeout so no single slow source blocks the entire dashboard.
@@ -182,6 +189,15 @@ async def _fetch_overview() -> dict:
         ],
         "count": len(CABLE_CORRIDORS),
     }
+
+    # AI situational brief (runs after main gather so it has all data)
+    try:
+        result["situation_brief"] = await asyncio.wait_for(
+            fetch_situation_brief(result), timeout=35.0,
+        )
+    except Exception as exc:
+        logger.warning("Situation brief failed: %s", exc)
+        result["situation_brief"] = {"error": str(exc)}
 
     # Attach source health + timestamp
     result["source_health"] = _breaker.status() if _breaker else {}
