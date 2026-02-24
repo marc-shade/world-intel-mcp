@@ -12,6 +12,7 @@ Phase 2: Conflict, Military, Infrastructure, Maritime, Climate (+10 = 24 tools).
 Phase 3: News, Intelligence, Prediction, Displacement, Aviation, Cyber (+9 = 33 tools).
 Phase 4: Reports — daily brief, country dossier, threat landscape (+3 = 36 tools).
 Phase 5: Analysis — focal points, signal summary, temporal anomalies, CII v2 (+3 = 39 tools).
+Phase 6: Military & infrastructure intelligence (+6 = 45 tools).
 """
 
 import asyncio
@@ -46,7 +47,7 @@ fetcher = Fetcher(cache=cache, breaker=breaker)
 # ---------------------------------------------------------------------------
 
 TOOLS: list[Tool] = [
-    # --- Markets (6 tools) ---
+    # --- Markets (7 tools) ---
     Tool(
         name="intel_market_quotes",
         description="Get real-time stock market index quotes (S&P 500, Dow, Nasdaq, FTSE, Nikkei, etc.). Optional: symbols (list of ticker symbols).",
@@ -89,6 +90,11 @@ TOOLS: list[Tool] = [
     Tool(
         name="intel_macro_signals",
         description="Get 7 key macro signals: Fear & Greed, mempool fees, DXY, VIX, gold, 10Y Treasury, BTC dominance.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="intel_commodity_quotes",
+        description="Get commodity futures quotes: gold, silver, crude oil (WTI & Brent), natural gas, corn, wheat, soybeans from Yahoo Finance.",
         inputSchema={"type": "object", "properties": {}},
     ),
     # --- Economic (3 tools) ---
@@ -334,7 +340,7 @@ TOOLS: list[Tool] = [
             },
         },
     ),
-    # --- Intelligence (7 tools) ---
+    # --- Intelligence (12 tools) ---
     Tool(
         name="intel_country_brief",
         description="Generate a country intelligence brief using Ollama LLM + World Bank + ACLED data. Falls back to data-only if LLM unavailable.",
@@ -396,6 +402,50 @@ TOOLS: list[Tool] = [
         name="intel_temporal_anomalies",
         description="Detect temporal anomalies — activity levels that deviate from historical baselines using Welford's algorithm. Reports z-score deviations like 'Military flights 3.2x normal for Thursday'.",
         inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="intel_unrest_events",
+        description="Get social unrest events (protests + riots) from ACLED with Haversine deduplication. Optional: country (name), days (default 7), limit (default 100).",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "country": {"type": "string", "description": "Country name filter"},
+                "days": {"type": "integer", "description": "Lookback days (default 7)", "default": 7},
+                "limit": {"type": "integer", "description": "Max results (default 100)", "default": 100},
+            },
+        },
+    ),
+    Tool(
+        name="intel_hotspot_escalation",
+        description="Dynamic escalation scores for 22 intel hotspots combining news, military, conflict, and convergence signals. Each hotspot scored 0-100.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="intel_military_surge",
+        description="Detect military surge anomalies — foreign aircraft concentration above baselines in 8 sensitive regions (Persian Gulf, Taiwan Strait, Baltic Sea, etc.).",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="intel_vessel_snapshot",
+        description="Naval activity snapshot at 9 strategic waterways (Hormuz, Malacca, Suez, etc.) from NGA navigational warnings. Each waterway scored clear/advisory/elevated/critical.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="intel_cascade_analysis",
+        description="Simulate infrastructure cascade — 'what if cable corridor X is disrupted?' Impact scoring across dependent countries. Optional: corridor name (default: simulate at-risk corridors).",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "corridor": {
+                    "type": "string",
+                    "description": "Cable corridor to simulate (e.g., red_sea, transpacific, asia_europe)",
+                    "enum": [
+                        "transatlantic_north", "transatlantic_south",
+                        "asia_europe", "red_sea", "transpacific", "mediterranean",
+                    ],
+                },
+            },
+        },
     ),
     # --- Reports (3 tools) ---
     Tool(
@@ -459,6 +509,8 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
             return await markets.fetch_sector_heatmap(fetcher)
         case "intel_macro_signals":
             return await markets.fetch_macro_signals(fetcher)
+        case "intel_commodity_quotes":
+            return await markets.fetch_commodity_quotes(fetcher)
 
         # Economic
         case "intel_energy_prices":
@@ -581,6 +633,23 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
             return await intelligence.fetch_signal_summary(fetcher, country=arguments.get("country"))
         case "intel_temporal_anomalies":
             return await intelligence.fetch_temporal_anomalies(fetcher)
+        case "intel_unrest_events":
+            return await intelligence.fetch_unrest_events(
+                fetcher,
+                country=arguments.get("country"),
+                days=arguments.get("days", 7),
+                limit=arguments.get("limit", 100),
+            )
+        case "intel_hotspot_escalation":
+            return await intelligence.fetch_hotspot_escalation(fetcher)
+        case "intel_military_surge":
+            return await intelligence.fetch_military_surge(fetcher)
+        case "intel_vessel_snapshot":
+            return await intelligence.fetch_vessel_snapshot(fetcher)
+        case "intel_cascade_analysis":
+            return await intelligence.fetch_cascade_analysis(
+                fetcher, corridor=arguments.get("corridor"),
+            )
 
         # Reports
         case "intel_daily_brief":

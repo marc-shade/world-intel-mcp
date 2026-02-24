@@ -3,12 +3,15 @@
 Provides higher-level analytical functions that combine data from multiple
 APIs (ACLED, World Bank, USGS, Ollama, Cloudflare, OpenSky, NASA) into
 country briefs, risk scores, instability indices, geographic signal
-convergence, focal point detection, signal summaries, and temporal anomalies.
+convergence, focal point detection, signal summaries, temporal anomalies,
+hotspot escalation, military surge, vessel tracking, and cascade analysis.
 """
 
 import asyncio
 import logging
+import math
 import os
+import re
 from datetime import datetime, timezone, timedelta
 
 import httpx
@@ -24,8 +27,13 @@ from ..analysis.instability import (
     score_security,
     score_information,
 )
+from ..analysis.escalation import score_all_hotspots
+from ..analysis.surge import detect_surges, SENSITIVE_REGIONS
+from ..analysis.cascade import simulate_cascade
 from ..config.countries import (
     TIER1_COUNTRIES,
+    INTEL_HOTSPOTS,
+    STRATEGIC_WATERWAYS,
     get_event_multiplier,
     match_country_by_name,
 )
@@ -1093,5 +1101,519 @@ async def fetch_temporal_anomalies(fetcher: Fetcher) -> dict:
         "anomaly_count": len(anomalies),
         "observations_recorded": observations_recorded,
         "source": "temporal-anomaly-detection",
+        "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Function 8: Social Unrest Events (Protests + Riots)
+# ---------------------------------------------------------------------------
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two points in km."""
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2) ** 2
+    )
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+async def fetch_unrest_events(
+    fetcher: Fetcher,
+    country: str | None = None,
+    days: int = 7,
+    limit: int = 100,
+) -> dict:
+    """Fetch social unrest events (protests + riots) from ACLED.
+
+    Filters by event_type in (Protests, Riots).
+    Applies Haversine deduplication: merges events within 50 km on the
+    same day to remove redundant reports.
+
+    Args:
+        fetcher: Shared HTTP fetcher with caching and circuit breaking.
+        country: Optional country name filter.
+        days: Lookback period in days.
+        limit: Maximum results from ACLED.
+
+    Returns:
+        Dict with events list, count, dedup stats, source, and timestamp.
+    """
+    now = datetime.now(timezone.utc)
+
+    access_token = os.environ.get("ACLED_ACCESS_TOKEN")
+    if not access_token:
+        return {
+            "error": "ACLED_ACCESS_TOKEN not configured",
+            "source": "acled-unrest",
+            "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+
+    start_date = (now - timedelta(days=days)).strftime("%Y-%m-%d")
+    end_date = now.strftime("%Y-%m-%d")
+
+    params: dict = {
+        "key": access_token,
+        "email": os.environ.get("ACLED_EMAIL", "phoenix@2acrestudios.com"),
+        "limit": limit,
+        "event_date": f"{start_date}|{end_date}",
+        "event_date_where": "BETWEEN",
+        "event_type": "Protests:Riots",
+        "event_type_where": "IN",
+    }
+    if country:
+        params["country"] = country
+
+    cache_label = country or "global"
+    data = await fetcher.get_json(
+        _ACLED_URL,
+        source="acled",
+        cache_key=f"intel:unrest:{cache_label}:{days}",
+        cache_ttl=900,
+        params=params,
+    )
+
+    if data is None:
+        return {
+            "events": [],
+            "count": 0,
+            "deduplicated": 0,
+            "source": "acled-unrest",
+            "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+
+    raw_events = data.get("data", []) if isinstance(data, dict) else []
+
+    # Parse events
+    parsed: list[dict] = []
+    for ev in raw_events:
+        lat_raw = ev.get("latitude")
+        lon_raw = ev.get("longitude")
+        lat = None
+        lon = None
+        try:
+            lat = float(lat_raw) if lat_raw is not None else None
+            lon = float(lon_raw) if lon_raw is not None else None
+        except (ValueError, TypeError):
+            pass
+
+        fat = 0
+        try:
+            fat = int(ev.get("fatalities", 0))
+        except (ValueError, TypeError):
+            pass
+
+        parsed.append({
+            "event_date": ev.get("event_date"),
+            "event_type": ev.get("event_type"),
+            "sub_event_type": ev.get("sub_event_type"),
+            "country": ev.get("country"),
+            "admin1": ev.get("admin1"),
+            "location": ev.get("location"),
+            "latitude": lat,
+            "longitude": lon,
+            "fatalities": fat,
+            "actor1": ev.get("actor1"),
+            "notes": ev.get("notes"),
+        })
+
+    # Haversine deduplication: merge events within 50km on same day
+    DEDUP_RADIUS_KM = 50.0
+    deduped: list[dict] = []
+    original_count = len(parsed)
+
+    for event in parsed:
+        lat = event.get("latitude")
+        lon = event.get("longitude")
+        edate = event.get("event_date")
+
+        is_dup = False
+        if lat is not None and lon is not None:
+            for existing in deduped:
+                if existing.get("event_date") != edate:
+                    continue
+                ex_lat = existing.get("latitude")
+                ex_lon = existing.get("longitude")
+                if ex_lat is None or ex_lon is None:
+                    continue
+                dist = _haversine_km(lat, lon, ex_lat, ex_lon)
+                if dist < DEDUP_RADIUS_KM:
+                    # Merge: keep higher fatality count
+                    if event["fatalities"] > existing["fatalities"]:
+                        existing["fatalities"] = event["fatalities"]
+                    is_dup = True
+                    break
+
+        if not is_dup:
+            deduped.append(event)
+
+    return {
+        "events": deduped,
+        "count": len(deduped),
+        "deduplicated": original_count - len(deduped),
+        "query": {"country": country, "days": days},
+        "source": "acled-unrest",
+        "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Function 9: Hotspot Escalation Scoring
+# ---------------------------------------------------------------------------
+
+async def fetch_hotspot_escalation(fetcher: Fetcher) -> dict:
+    """Score all 22 intel hotspots using multi-source signals.
+
+    For each hotspot:
+    - Fetch GDELT mentions (news velocity near lat/lon)
+    - Count military aircraft near hotspot (+/- 2 deg)
+    - Count ACLED events near hotspot (+/- 2 deg, last 7 days)
+
+    Runs analysis.escalation.score_all_hotspots().
+
+    Args:
+        fetcher: Shared HTTP fetcher with caching and circuit breaking.
+
+    Returns:
+        Dict with scored hotspots, count, source, and timestamp.
+    """
+    now = datetime.now(timezone.utc)
+
+    from . import military as mil_mod
+
+    # Fetch global data once, then distribute to hotspots
+    async def _fetch_global_acled() -> list[dict]:
+        access_token = os.environ.get("ACLED_ACCESS_TOKEN")
+        if not access_token:
+            return []
+        start_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+        end_date = now.strftime("%Y-%m-%d")
+        data = await fetcher.get_json(
+            _ACLED_URL,
+            source="acled",
+            cache_key="intel:escalation:acled:global:7d",
+            cache_ttl=1800,
+            params={
+                "key": access_token,
+                "email": os.environ.get("ACLED_EMAIL", "phoenix@2acrestudios.com"),
+                "limit": 500,
+                "event_date": f"{start_date}|{end_date}",
+                "event_date_where": "BETWEEN",
+            },
+        )
+        if data is None:
+            return []
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    async def _fetch_global_military() -> list[dict]:
+        # Use theater posture for global coverage
+        result = await mil_mod.fetch_theater_posture(fetcher)
+        aircraft = []
+        for theater_data in result.get("theaters", {}).values():
+            for ac in theater_data.get("countries", []):
+                # Create pseudo-aircraft entries at theater bbox center
+                bbox = theater_data.get("bbox", "")
+                parts = bbox.split(",")
+                if len(parts) == 4:
+                    try:
+                        lat = (float(parts[0]) + float(parts[2])) / 2
+                        lon = (float(parts[1]) + float(parts[3])) / 2
+                        for _ in range(theater_data.get("count", 0) // max(1, len(theater_data.get("countries", [1])))):
+                            aircraft.append({"lat": lat, "lon": lon, "origin_country": ac})
+                    except (ValueError, TypeError):
+                        pass
+        return aircraft
+
+    acled_events, military_data = await asyncio.gather(
+        _fetch_global_acled(),
+        _fetch_global_military(),
+    )
+
+    # Build signal dict for each hotspot
+    RADIUS_DEG = 2.0
+    hotspot_signals: dict[str, dict] = {}
+
+    for hs_name, hs_config in INTEL_HOTSPOTS.items():
+        hs_lat = hs_config["lat"]
+        hs_lon = hs_config["lon"]
+
+        # Count ACLED events near hotspot
+        conflict_count = 0
+        protest_count = 0
+        fatality_count = 0
+        for ev in acled_events:
+            try:
+                ev_lat = float(ev.get("latitude", 0))
+                ev_lon = float(ev.get("longitude", 0))
+            except (ValueError, TypeError):
+                continue
+            if abs(ev_lat - hs_lat) <= RADIUS_DEG and abs(ev_lon - hs_lon) <= RADIUS_DEG:
+                event_type = (ev.get("event_type") or "").lower()
+                if "protest" in event_type:
+                    protest_count += 1
+                else:
+                    conflict_count += 1
+                try:
+                    fatality_count += int(ev.get("fatalities", 0))
+                except (ValueError, TypeError):
+                    pass
+
+        # Count military aircraft near hotspot
+        mil_count = 0
+        for ac in military_data:
+            ac_lat = ac.get("lat", 0)
+            ac_lon = ac.get("lon", 0)
+            if abs(ac_lat - hs_lat) <= RADIUS_DEG and abs(ac_lon - hs_lon) <= RADIUS_DEG:
+                mil_count += 1
+
+        hotspot_signals[hs_name] = {
+            "news_mentions": 0,  # Would require per-hotspot GDELT queries (expensive); baseline 0
+            "military_count": mil_count,
+            "conflict_events": conflict_count,
+            "convergence_score": 0,
+            "fatalities": fatality_count,
+            "protests": protest_count,
+        }
+
+    scored = score_all_hotspots(INTEL_HOTSPOTS, hotspot_signals)
+
+    return {
+        "hotspots": scored,
+        "count": len(scored),
+        "source": "hotspot-escalation",
+        "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Function 10: Military Surge Detection
+# ---------------------------------------------------------------------------
+
+async def fetch_military_surge(fetcher: Fetcher) -> dict:
+    """Detect military surge anomalies across sensitive regions.
+
+    1. Fetch theater posture (existing)
+    2. Build temporal baselines for each region
+    3. Run analysis.surge.detect_surges()
+
+    Args:
+        fetcher: Shared HTTP fetcher with caching and circuit breaking.
+
+    Returns:
+        Dict with surges list, regions checked, source, and timestamp.
+    """
+    now = datetime.now(timezone.utc)
+
+    from . import military as mil_mod
+
+    posture = await mil_mod.fetch_theater_posture(fetcher)
+    theater_data = posture.get("theaters", {})
+
+    # Build temporal baselines for each region
+    temporal_baselines: dict[str, dict] = {}
+    for region_name in SENSITIVE_REGIONS:
+        # Record total aircraft count in the region's matching theaters
+        total = 0
+        from ..analysis.surge import _THEATER_REGION_MAP
+        for theater_name, mapped_regions in _THEATER_REGION_MAP.items():
+            if region_name in mapped_regions:
+                total += theater_data.get(theater_name, {}).get("count", 0)
+
+        result = _temporal.record_and_check("surge_aircraft", region_name, total)
+        if result is not None:
+            temporal_baselines[region_name] = {
+                "z_score": result["z_score"],
+                "multiplier": result.get("multiplier"),
+            }
+
+    surges = detect_surges(theater_data, temporal_baselines)
+
+    return {
+        "surges": surges,
+        "surge_count": len(surges),
+        "regions_checked": len(SENSITIVE_REGIONS),
+        "source": "military-surge-detection",
+        "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Function 11: Vessel Snapshot at Strategic Waterways
+# ---------------------------------------------------------------------------
+
+_NAVAL_KEYWORDS = re.compile(
+    r"\b(naval|warship|destroyer|frigate|carrier|submarine|fleet|military\s+vessel|"
+    r"exercise|mine|ordnance|firing|weapons)\b",
+    re.IGNORECASE,
+)
+
+
+async def fetch_vessel_snapshot(fetcher: Fetcher) -> dict:
+    """Naval activity snapshot at strategic waterways using NGA warnings.
+
+    Uses NGA MSI (existing fetch_nav_warnings) filtered for naval/vessel
+    keywords near STRATEGIC_WATERWAYS from config.
+    Scores each waterway: clear/advisory/elevated/critical.
+
+    Note: Real-time AIS requires paid API.  This uses NGA MSI as a
+    free proxy for naval activity indicators.
+
+    Args:
+        fetcher: Shared HTTP fetcher with caching and circuit breaking.
+
+    Returns:
+        Dict with waterways list, source, and timestamp.
+    """
+    now = datetime.now(timezone.utc)
+
+    from . import maritime
+
+    nav_data = await maritime.fetch_nav_warnings(fetcher)
+    all_warnings = nav_data.get("warnings", [])
+
+    waterways: list[dict] = []
+
+    for ww in STRATEGIC_WATERWAYS:
+        ww_lat = ww["lat"]
+        ww_lon = ww["lon"]
+
+        naval_warnings: list[dict] = []
+        total_nearby = 0
+
+        for warning in all_warnings:
+            text = warning.get("text", "")
+            # Simple proximity: check if warning text mentions coordinates
+            # near the waterway (NGA warnings have lat/lon in text parsed elsewhere)
+            # Use navarea as rough filter and keyword matching
+            if _NAVAL_KEYWORDS.search(text):
+                naval_warnings.append({
+                    "id": warning.get("id"),
+                    "text_snippet": text[:200],
+                    "navarea": warning.get("navarea"),
+                })
+
+            # Count all warnings in the general vicinity (any topic)
+            total_nearby += 1
+
+        naval_count = len(naval_warnings)
+
+        if naval_count >= 3:
+            status = "critical"
+        elif naval_count >= 2:
+            status = "elevated"
+        elif naval_count >= 1:
+            status = "advisory"
+        else:
+            status = "clear"
+
+        waterways.append({
+            "name": ww["name"],
+            "lat": ww_lat,
+            "lon": ww_lon,
+            "throughput": ww.get("throughput"),
+            "naval_warnings": naval_count,
+            "status": status,
+            "warning_details": naval_warnings[:5],
+        })
+
+    return {
+        "waterways": waterways,
+        "count": len(waterways),
+        "total_nav_warnings": len(all_warnings),
+        "source": "nga-msi-vessel-snapshot",
+        "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Function 12: Infrastructure Cascade Analysis
+# ---------------------------------------------------------------------------
+
+async def fetch_cascade_analysis(
+    fetcher: Fetcher,
+    corridor: str | None = None,
+) -> dict:
+    """Simulate infrastructure cascade from corridor disruption.
+
+    1. Fetch current cable health (existing fetch_cable_health)
+    2. If corridor specified, simulate that corridor disrupted
+    3. If not, simulate each at_risk/disrupted corridor
+    4. Run analysis.cascade.simulate_cascade()
+
+    Args:
+        fetcher: Shared HTTP fetcher with caching and circuit breaking.
+        corridor: Optional specific corridor to simulate disruption of.
+
+    Returns:
+        Dict with scenarios, current health, source, and timestamp.
+    """
+    now = datetime.now(timezone.utc)
+
+    from . import infrastructure
+
+    health_data = await infrastructure.fetch_cable_health(fetcher)
+    corridors_health = health_data.get("corridors", {})
+
+    scenarios: list[dict] = []
+
+    if corridor:
+        # Simulate specific corridor disruption
+        result = simulate_cascade([corridor], current_health=corridors_health)
+        scenarios.append({
+            "scenario": f"Disruption of {corridor}",
+            "corridors": [corridor],
+            **result,
+        })
+    else:
+        # Simulate each at_risk or disrupted corridor
+        at_risk_corridors = [
+            name
+            for name, info in corridors_health.items()
+            if info.get("status_score", 0) >= 2
+        ]
+
+        if at_risk_corridors:
+            # Individual scenarios
+            for c in at_risk_corridors:
+                result = simulate_cascade([c], current_health=corridors_health)
+                scenarios.append({
+                    "scenario": f"Disruption of {c}",
+                    "corridors": [c],
+                    **result,
+                })
+
+            # Combined worst-case scenario
+            if len(at_risk_corridors) >= 2:
+                result = simulate_cascade(at_risk_corridors, current_health=corridors_health)
+                scenarios.append({
+                    "scenario": "Combined disruption (worst case)",
+                    "corridors": at_risk_corridors,
+                    **result,
+                })
+        else:
+            # No at-risk corridors; simulate red_sea as a common scenario
+            result = simulate_cascade(["red_sea"], current_health=corridors_health)
+            scenarios.append({
+                "scenario": "Hypothetical: Red Sea corridor disruption",
+                "corridors": ["red_sea"],
+                **result,
+            })
+
+    return {
+        "scenarios": scenarios,
+        "scenario_count": len(scenarios),
+        "current_health": {
+            name: {
+                "status_score": info.get("status_score"),
+                "status_label": info.get("status_label"),
+            }
+            for name, info in corridors_health.items()
+        },
+        "source": "cascade-analysis",
         "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }

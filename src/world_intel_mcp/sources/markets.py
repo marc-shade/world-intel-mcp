@@ -44,6 +44,17 @@ _SECTOR_ETFS: dict[str, str] = {
     "XLB": "Materials",
 }
 
+_COMMODITY_SYMBOLS: dict[str, str] = {
+    "GC=F": "Gold",
+    "SI=F": "Silver",
+    "CL=F": "Crude Oil WTI",
+    "BZ=F": "Brent Crude",
+    "NG=F": "Natural Gas",
+    "ZC=F": "Corn",
+    "ZW=F": "Wheat",
+    "ZS=F": "Soybeans",
+}
+
 _FEAR_GREED_URL = "https://api.alternative.me/fng/?limit=1"
 _MEMPOOL_FEES_URL = "https://mempool.space/api/v1/fees/recommended"
 
@@ -228,6 +239,42 @@ async def fetch_etf_flows(fetcher: Fetcher) -> dict:
 
     return {
         "etfs": etfs,
+        "source": "yahoo-finance",
+        "timestamp": _utc_now_iso(),
+    }
+
+
+async def fetch_commodity_quotes(fetcher: Fetcher) -> dict:
+    """Fetch commodity futures quotes from Yahoo Finance.
+
+    Covers gold, silver, crude oil (WTI & Brent), natural gas, corn,
+    wheat, and soybeans.  Reuses ``_fetch_yahoo_quote`` for parallel
+    fetching with built-in caching.
+
+    Returns::
+
+        {"commodities": [{symbol, name, price, change_pct}], ...}
+    """
+    tasks = [
+        _fetch_yahoo_quote(fetcher, sym, f"markets:commodity:{sym}", 300)
+        for sym in _COMMODITY_SYMBOLS
+    ]
+    results = await asyncio.gather(*tasks)
+
+    commodities: list[dict] = []
+    for sym, quote in zip(_COMMODITY_SYMBOLS, results):
+        if quote is None:
+            continue
+        commodities.append({
+            "symbol": sym,
+            "name": _COMMODITY_SYMBOLS[sym],
+            "price": quote["price"],
+            "change_pct": quote["change_pct"],
+        })
+
+    return {
+        "commodities": commodities,
+        "count": len(commodities),
         "source": "yahoo-finance",
         "timestamp": _utc_now_iso(),
     }
