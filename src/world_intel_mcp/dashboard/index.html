@@ -391,6 +391,8 @@ a { color: var(--accent); text-decoration: none; }
 }
 .mk-nuke-fac:hover { transform: scale(1.4); }
 .mk-nuke-fac.hot { animation: glow-gold 2s ease-in-out infinite; }
+.pipeline-line { cursor: pointer; transition: opacity 0.15s; }
+.pipeline-line:hover { opacity: 1 !important; stroke-width: 3 !important; }
 @keyframes glow-gold {
     0%,100% { box-shadow: 0 0 4px rgba(240,184,64,0.3); }
     50% { box-shadow: 0 0 16px rgba(240,184,64,0.7); }
@@ -595,8 +597,8 @@ $('#drawerToggle').addEventListener('click', function() {
 });
 
 // ════════════ DETAIL MODAL ════════════
-var COLORS = { earthquake: 'var(--red)', military: 'var(--blue)', conflict: 'var(--amber)', fire: 'var(--gold)', convergence: 'var(--purple)', nuclear: 'var(--green)', military_base: 'var(--teal)', port: 'var(--blue)', nuclear_facility: 'var(--gold)', pipeline: 'var(--purple)' };
-var LABELS = { earthquake: 'EARTHQUAKE', military: 'MILITARY AIRCRAFT', conflict: 'CONFLICT EVENT', fire: 'WILDFIRE CLUSTER', convergence: 'SIGNAL CONVERGENCE', nuclear: 'NUCLEAR MONITOR', military_base: 'MILITARY BASE', port: 'STRATEGIC PORT', nuclear_facility: 'NUCLEAR FACILITY', pipeline: 'PIPELINE' };
+var COLORS = { earthquake: 'var(--red)', military: 'var(--blue)', conflict: 'var(--amber)', fire: 'var(--gold)', convergence: 'var(--purple)', nuclear: 'var(--green)', military_base: 'var(--teal)', port: 'var(--blue)', nuclear_facility: 'var(--gold)', pipeline: 'var(--purple)', exposure: '#e040fb' };
+var LABELS = { earthquake: 'EARTHQUAKE', military: 'MILITARY AIRCRAFT', conflict: 'CONFLICT EVENT', fire: 'WILDFIRE CLUSTER', convergence: 'SIGNAL CONVERGENCE', nuclear: 'NUCLEAR MONITOR', military_base: 'MILITARY BASE', port: 'STRATEGIC PORT', nuclear_facility: 'NUCLEAR FACILITY', pipeline: 'PIPELINE', exposure: 'POPULATION EXPOSURE' };
 
 function showDetail(type, d) {
     var title = '', subtitle = '', fields = [], link = '';
@@ -719,6 +721,17 @@ function showDetail(type, d) {
             ['Operator', d.operator || '\u2014'],
             ['Notes', d.notes || '\u2014'],
             ['Coordinates', d.latitude != null ? d.latitude.toFixed(3) + ', ' + d.longitude.toFixed(3) : '\u2014']
+        ];
+    } else if (type === 'exposure') {
+        title = d.city || 'Exposed City';
+        subtitle = (d.country || '') + ' \u2014 ' + (d.population || '');
+        fields = [
+            ['City', d.city || '\u2014'],
+            ['Country', d.country || '\u2014'],
+            ['Population', d.population || '\u2014'],
+            ['Nearest Event', d.nearest_event || '\u2014', d.nearest_event === 'conflict' ? 'crit' : 'high'],
+            ['Event Detail', d.event_detail || '\u2014'],
+            ['Distance', d.distance_km != null ? d.distance_km + ' km' : '\u2014']
         ];
     }
 
@@ -1119,6 +1132,28 @@ function updateMapInfra(data) {
             });
         });
         mk.addTo(mapLayers.infra);
+    });
+    // Pipelines (polylines: lat_start/lon_start → lat_end/lon_end)
+    var pipeColors = { oil: '#ff9100', gas: '#4da8ff', hydrogen: '#34d399', lng: '#2dd4bf' };
+    var pipeStatusOpacity = { active: 0.55, destroyed: 0.25, terminated: 0.25, cancelled: 0.2, intermittent: 0.45, reduced: 0.4, stalled: 0.3, construction: 0.35, proposed: 0.2 };
+    var pipes = (data.pipelines && data.pipelines.pipelines) || [];
+    pipes.forEach(function(p) {
+        if (p.lat_start == null || p.lon_start == null || p.lat_end == null || p.lon_end == null) return;
+        total++;
+        var color = pipeColors[p.type] || '#a78bfa';
+        var opacity = pipeStatusOpacity[p.status] || 0.4;
+        var dash = (p.status === 'proposed' || p.status === 'construction') ? '6 4' : (p.status === 'destroyed' || p.status === 'terminated' || p.status === 'cancelled') ? '3 6' : null;
+        var opts = { color: color, weight: 2, opacity: opacity, className: 'pipeline-line' };
+        if (dash) opts.dashArray = dash;
+        var line = L.polyline([[p.lat_start, p.lon_start], [p.lat_end, p.lon_end]], opts);
+        line.bindTooltip(esc(p.name) + '<br><span style="opacity:0.7">' + esc(p.type) + ' \u2022 ' + esc(p.status) + '</span>', { className: 'mk-tip', sticky: true });
+        line.on('click', function() {
+            showDetail('pipeline', {
+                name: p.name, route: p.route, type: p.type,
+                capacity: p.capacity, status: p.status, notes: p.notes
+            });
+        });
+        line.addTo(mapLayers.infra);
     });
     $('#cntInfra').textContent = total;
 }
@@ -1954,6 +1989,20 @@ function connectSSE() {
 
 // ════════════ BOOT ════════════
 initMap();
+
+// Load static geospatial data immediately (bases, ports, nuclear facilities).
+// This populates the infrastructure layer without waiting for the full SSE
+// gather, which can take 30-60s when external APIs are slow.
+fetch('/api/static')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        try { updateMapInfra(data); } catch(e) { console.warn('static infra failed:', e); }
+        // Dismiss loading overlay once static infra is rendered — the map is
+        // usable with 158 items while live feeds continue loading via SSE.
+        document.getElementById('loading').classList.add('gone');
+    })
+    .catch(function(e) { console.warn('static fetch failed:', e); });
+
 connectSSE();
 </script>
 </body>

@@ -22,15 +22,18 @@ async def _safe(coro, label: str) -> dict:
         return {}
 
 
-def _fleet_readiness(theaters: list, waterways: list, surges: list) -> tuple[str, int]:
+def _fleet_readiness(theaters: dict, waterways: list, surges: list) -> tuple[str, int]:
     """Assess overall fleet readiness from component data.
 
+    *theaters* is a dict keyed by theater name (e.g. ``{"europe": {"count": 5, ...}}``).
     Returns (level, score 0-100).
     """
     score = 0.0
 
     # Theater activity: more aircraft = higher activity
-    total_aircraft = sum(t.get("aircraft_count", 0) for t in theaters)
+    total_aircraft = sum(
+        t.get("count", 0) for t in theaters.values() if isinstance(t, dict)
+    )
     score += min(30.0, total_aircraft * 0.5)
 
     # Waterway status: elevated/critical waterways raise score
@@ -81,19 +84,23 @@ async def fetch_fleet_report(fetcher) -> dict:
     naval_base_count = naval_bases.get("count", 0)
 
     # Extract key data
-    theaters = posture_data.get("theaters", [])
+    theaters = posture_data.get("theaters", {})
+    if not isinstance(theaters, dict):
+        theaters = {}
     waterways = vessel_data.get("waterways", [])
     surges = surge_data.get("surges", [])
 
     # Compute fleet readiness
     readiness_level, readiness_score = _fleet_readiness(theaters, waterways, surges)
 
-    # Theater summary
+    # Theater summary — theaters is {name: {count, countries, top_types, ...}}
     theater_summary = []
-    for t in theaters:
+    for name, t in theaters.items():
+        if not isinstance(t, dict):
+            continue
         theater_summary.append({
-            "name": t.get("name", "Unknown"),
-            "aircraft_count": t.get("aircraft_count", 0),
+            "name": name,
+            "aircraft_count": t.get("count", 0),
             "top_types": t.get("top_types", [])[:3],
         })
 
@@ -126,7 +133,9 @@ async def fetch_fleet_report(fetcher) -> dict:
         "active_surges": active_surges,
         "surge_count": len(active_surges),
         "naval_base_count": naval_base_count,
-        "total_tracked_aircraft": sum(t.get("aircraft_count", 0) for t in theaters),
+        "total_tracked_aircraft": sum(
+            t.get("count", 0) for t in theaters.values() if isinstance(t, dict)
+        ),
         "source": "fleet-activity-report",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

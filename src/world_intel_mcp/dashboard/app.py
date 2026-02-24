@@ -116,8 +116,18 @@ async def _fetch_overview() -> dict:
         "population_exposure": fetch_population_exposure(fetcher),
     }
 
+    # Per-coro timeout so no single slow source blocks the entire dashboard.
+    # Without this, 80+ RSS feeds timing out sequentially can delay the
+    # first SSE frame for minutes, leaving the dashboard stuck at all-zeros.
+    async def _with_timeout(name: str, coro, timeout: float = 45.0):
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.warning("Dashboard fetch %s timed out after %.0fs", name, timeout)
+            return {"error": f"timeout after {timeout}s", "_timeout": True}
+
     gathered = await asyncio.gather(
-        *[asyncio.create_task(c) for c in coros.values()],
+        *[_with_timeout(name, c) for name, c in zip(coros.keys(), coros.values())],
         return_exceptions=True,
     )
 
@@ -215,6 +225,20 @@ async def api_stream(request):
     )
 
 
+async def api_static(request):
+    """Return static geospatial datasets instantly (no API calls).
+
+    The dashboard fetches this on boot so the infrastructure layer
+    populates immediately without waiting for the full SSE gather.
+    """
+    return JSONResponse({
+        "military_bases": {"bases": MILITARY_BASES, "count": len(MILITARY_BASES)},
+        "strategic_ports": {"ports": STRATEGIC_PORTS, "count": len(STRATEGIC_PORTS)},
+        "pipelines": {"pipelines": PIPELINES, "count": len(PIPELINES)},
+        "nuclear_facilities": {"facilities": NUCLEAR_FACILITIES, "count": len(NUCLEAR_FACILITIES)},
+    }, headers={"Access-Control-Allow-Origin": "*"})
+
+
 async def api_health(request):
     """Health check."""
     return JSONResponse({"status": "ok"})
@@ -278,6 +302,7 @@ app = Starlette(
         Route("/", index),
         Route("/api/overview", api_overview),
         Route("/api/stream", api_stream),
+        Route("/api/static", api_static),
         Route("/api/health", api_health),
         Route("/api/report/pdf", api_report_pdf),
     ],

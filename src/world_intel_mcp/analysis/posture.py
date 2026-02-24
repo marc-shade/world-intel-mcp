@@ -59,11 +59,15 @@ def _score_military(surge_data: dict, posture_data: dict) -> tuple[float, list[s
         for s in surges[:3]:
             signals.append(f"Surge: {s.get('region', 'unknown')} ({s.get('aircraft_count', '?')} aircraft)")
 
-    theaters = posture_data.get("theaters", [])
-    active_theaters = [t for t in theaters if t.get("aircraft_count", 0) > 10]
+    theaters = posture_data.get("theaters", {})
+    # theaters is a dict keyed by theater name, values are dicts with "count"
+    if isinstance(theaters, dict):
+        active_theaters = [(name, t) for name, t in theaters.items() if isinstance(t, dict) and t.get("count", 0) > 10]
+    else:
+        active_theaters = []
     score += min(50.0, len(active_theaters) * 12.0)
-    for t in active_theaters[:3]:
-        signals.append(f"{t.get('name', '?')}: {t.get('aircraft_count', 0)} aircraft")
+    for name, t in active_theaters[:3]:
+        signals.append(f"{name}: {t.get('count', 0)} aircraft")
 
     return min(100.0, score), signals
 
