@@ -799,6 +799,51 @@ function showDetail(type, d) {
             ['Event Detail', d.event_detail || '\u2014'],
             ['Distance', d.distance_km != null ? d.distance_km + ' km' : '\u2014']
         ];
+    } else if (type === 'airtraffic') {
+        title = d.callsign || 'Aircraft';
+        subtitle = d.origin || '';
+        fields = [
+            ['Callsign', d.callsign || '\u2014'],
+            ['Origin', d.origin || '\u2014'],
+            ['Altitude', d.alt != null ? d.alt + ' m (' + Math.round(d.alt * 3.281) + ' ft)' : '\u2014'],
+            ['Type', d.commercial ? 'Commercial' : 'General Aviation'],
+            ['Coordinates', d.lat != null ? d.lat + ', ' + d.lon : '\u2014']
+        ];
+    } else if (type === 'traffic_city') {
+        title = d.name || 'City';
+        subtitle = d.country || '';
+        var congPct2 = d.congestion_pct || 0;
+        fields = [
+            ['City', d.name || '\u2014'],
+            ['Country', d.country || '\u2014'],
+            ['Congestion', congPct2 + '%', congPct2 >= 50 ? 'crit' : congPct2 >= 25 ? 'high' : ''],
+            ['Current Speed', d.current_speed_kmh + ' km/h'],
+            ['Free Flow', d.free_flow_speed_kmh + ' km/h'],
+            ['Coordinates', d.lat + ', ' + d.lon]
+        ];
+    } else if (type === 'webcam') {
+        title = d.title || 'Camera';
+        subtitle = (d.city || '') + (d.country ? ', ' + d.country : '');
+        fields = [
+            ['Title', d.title || '\u2014'],
+            ['City', d.city || '\u2014'],
+            ['Country', d.country || '\u2014'],
+            ['Status', d.status || '\u2014'],
+            ['Coordinates', d.lat != null ? d.lat + ', ' + d.lon : '\u2014']
+        ];
+        link = d.player_url || '';
+    } else if (type === 'navwarn') {
+        title = 'NAVAREA ' + (d.navarea || '?') + ' \u2014 ' + (d.id || '');
+        subtitle = d.status || '';
+        fields = [
+            ['ID', d.id || '\u2014'],
+            ['NAVAREA', d.navarea || '\u2014'],
+            ['Subregion', d.subregion || '\u2014'],
+            ['Status', d.status || '\u2014'],
+            ['Issued', d.issue_date || '\u2014'],
+            ['Authority', d.authority || '\u2014'],
+            ['Text', d.text || '\u2014']
+        ];
     }
 
     var hdr = '<div class="detail-cat"><span class="detail-cat-dot" style="background:' + c + ';--cat-color:' + c + '"></span><span class="detail-cat-label">' + esc(LABELS[type] || type) + '</span></div>' +
