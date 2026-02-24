@@ -117,17 +117,17 @@ async def fetch_population_exposure(
                 "detail": f"M{eq.get('magnitude', '?')} {eq.get('place', '')}",
             })
 
-    # Wildfires
-    for region_data in results.get("wildfire", {}).get("regions", []):
-        for fire in region_data.get("detections", []):
-            lat = fire.get("latitude") or fire.get("lat")
-            lon = fire.get("longitude") or fire.get("lon")
+    # Wildfires (fires_by_region is a dict keyed by region name)
+    for region_name, region_data in results.get("wildfire", {}).get("fires_by_region", {}).items():
+        for cluster in region_data.get("top_clusters", []):
+            lat = cluster.get("lat")
+            lon = cluster.get("lon")
             if lat is not None and lon is not None:
                 events.append({
                     "lat": float(lat),
                     "lon": float(lon),
                     "type": "wildfire",
-                    "detail": f"FRP {fire.get('frp', '?')} in {region_data.get('region', '?')}",
+                    "detail": f"FRP {cluster.get('max_frp', '?')} ({cluster.get('fire_count', '?')} fires) in {region_name}",
                 })
 
     # Conflict

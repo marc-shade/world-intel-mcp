@@ -1887,30 +1887,35 @@ function updateTicker(data) {
 function updateAll(data) {
     latestData = data;
 
-    // Map layers
-    updateMapQuakes(data.earthquakes);
-    updateMapMilitary(data.military_flights);
+    // Map layers (each wrapped to prevent cascade failures)
     var conflictData = (data.acled_events && !data.acled_events.error && data.acled_events.count > 0) ? data.acled_events
         : (data.ucdp_events && !data.ucdp_events.error && data.ucdp_events.count > 0) ? data.ucdp_events
         : data.conflict_zones;
-    updateMapConflict(conflictData);
-    updateMapFires(data.wildfires);
-    updateMapConvergence(data.signal_convergence);
-    updateMapNuclear(data.nuclear_monitor);
-    updateMapInfra(data);
-    updateMapExposure(data.population_exposure);
+    var mapUpdates = [
+        ['quakes', function() { updateMapQuakes(data.earthquakes); }],
+        ['military', function() { updateMapMilitary(data.military_flights); }],
+        ['conflict', function() { updateMapConflict(conflictData); }],
+        ['fires', function() { updateMapFires(data.wildfires); }],
+        ['convergence', function() { updateMapConvergence(data.signal_convergence); }],
+        ['nuclear', function() { updateMapNuclear(data.nuclear_monitor); }],
+        ['infra', function() { updateMapInfra(data); }],
+        ['exposure', function() { updateMapExposure(data.population_exposure); }]
+    ];
+    mapUpdates.forEach(function(pair) {
+        try { pair[1](); } catch(e) { console.warn('updateAll: ' + pair[0] + ' failed:', e); }
+    });
 
     // Alert banner
-    updateAlertBanner(data.alert_digest);
+    try { updateAlertBanner(data.alert_digest); } catch(e) { console.warn('updateAll: alert_banner failed:', e); }
 
     // HUD
-    updateHudStats(data);
+    try { updateHudStats(data); } catch(e) { console.warn('updateAll: hud failed:', e); }
 
     // Drawer
-    updateDrawer(data);
+    try { updateDrawer(data); } catch(e) { console.warn('updateAll: drawer failed:', e); }
 
     // Ticker
-    updateTicker(data);
+    try { updateTicker(data); } catch(e) { console.warn('updateAll: ticker failed:', e); }
 
     // Feed health
     var feedKeys = Object.keys(data).filter(function(k) { return k !== 'source_health' && k !== 'cache_stats' && k !== 'timestamp'; });
