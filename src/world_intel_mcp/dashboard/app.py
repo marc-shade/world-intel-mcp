@@ -46,8 +46,9 @@ from world_intel_mcp.analysis.alerts import fetch_alert_digest, fetch_weekly_tre
 from world_intel_mcp.analysis.posture import fetch_strategic_posture
 from world_intel_mcp.analysis.exposure import fetch_population_exposure
 from world_intel_mcp.sources.fleet import fetch_fleet_report
-from world_intel_mcp.config.countries import INTEL_HOTSPOTS
+from world_intel_mcp.config.countries import INTEL_HOTSPOTS, STRATEGIC_WATERWAYS
 from world_intel_mcp.config.geospatial import MILITARY_BASES, STRATEGIC_PORTS, PIPELINES, NUCLEAR_FACILITIES
+from world_intel_mcp.sources.infrastructure import CABLE_CORRIDORS
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,14 @@ async def _fetch_overview() -> dict:
     result["strategic_ports"] = {"ports": STRATEGIC_PORTS, "count": len(STRATEGIC_PORTS)}
     result["pipelines"] = {"pipelines": PIPELINES, "count": len(PIPELINES)}
     result["nuclear_facilities"] = {"facilities": NUCLEAR_FACILITIES, "count": len(NUCLEAR_FACILITIES)}
+    result["waterways"] = {"waterways": STRATEGIC_WATERWAYS, "count": len(STRATEGIC_WATERWAYS)}
+    result["cable_corridors"] = {
+        "corridors": [
+            {"name": n, "lat_range": c["lat_range"], "lon_range": c["lon_range"], "cables": c["cables"]}
+            for n, c in CABLE_CORRIDORS.items()
+        ],
+        "count": len(CABLE_CORRIDORS),
+    }
 
     # Attach source health + timestamp
     result["source_health"] = _breaker.status() if _breaker else {}
@@ -236,6 +245,14 @@ async def api_static(request):
         "strategic_ports": {"ports": STRATEGIC_PORTS, "count": len(STRATEGIC_PORTS)},
         "pipelines": {"pipelines": PIPELINES, "count": len(PIPELINES)},
         "nuclear_facilities": {"facilities": NUCLEAR_FACILITIES, "count": len(NUCLEAR_FACILITIES)},
+        "waterways": {"waterways": STRATEGIC_WATERWAYS, "count": len(STRATEGIC_WATERWAYS)},
+        "cable_corridors": {
+            "corridors": [
+                {"name": n, "lat_range": c["lat_range"], "lon_range": c["lon_range"], "cables": c["cables"]}
+                for n, c in CABLE_CORRIDORS.items()
+            ],
+            "count": len(CABLE_CORRIDORS),
+        },
     }, headers={"Access-Control-Allow-Origin": "*"})
 
 

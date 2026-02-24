@@ -70,14 +70,21 @@ class Cache:
         return json.loads(row[0])
 
     def set(self, key: str, value: Any, ttl_seconds: int) -> None:
-        """Store a value with TTL in seconds."""
-        conn = self._get_conn()
-        now = time.time()
-        conn.execute(
-            "INSERT OR REPLACE INTO cache (key, value, expires_at, created_at) VALUES (?, ?, ?, ?)",
-            (key, json.dumps(value, default=str), now + ttl_seconds, now),
-        )
-        conn.commit()
+        """Store a value with TTL in seconds.
+
+        Write failures (readonly DB, locked) are logged and swallowed —
+        the cache is best-effort and must never crash the caller.
+        """
+        try:
+            conn = self._get_conn()
+            now = time.time()
+            conn.execute(
+                "INSERT OR REPLACE INTO cache (key, value, expires_at, created_at) VALUES (?, ?, ?, ?)",
+                (key, json.dumps(value, default=str), now + ttl_seconds, now),
+            )
+            conn.commit()
+        except sqlite3.OperationalError as exc:
+            logger.warning("Cache write failed for %s: %s", key, exc)
 
     def delete(self, key: str) -> None:
         """Delete a specific key."""
@@ -87,10 +94,14 @@ class Cache:
 
     def evict_expired(self) -> int:
         """Remove all expired entries. Returns count removed."""
-        conn = self._get_conn()
-        cursor = conn.execute("DELETE FROM cache WHERE expires_at < ?", (time.time(),))
-        conn.commit()
-        return cursor.rowcount
+        try:
+            conn = self._get_conn()
+            cursor = conn.execute("DELETE FROM cache WHERE expires_at < ?", (time.time(),))
+            conn.commit()
+            return cursor.rowcount
+        except sqlite3.OperationalError as exc:
+            logger.warning("Cache evict failed: %s", exc)
+            return 0
 
     def stats(self) -> dict[str, Any]:
         """Cache statistics."""

@@ -393,6 +393,14 @@ a { color: var(--accent); text-decoration: none; }
 .mk-nuke-fac.hot { animation: glow-gold 2s ease-in-out infinite; }
 .pipeline-line { cursor: pointer; transition: opacity 0.15s; }
 .pipeline-line:hover { opacity: 1 !important; stroke-width: 3 !important; }
+.mk-waterway {
+    width: 10px; height: 10px; background: var(--accent); opacity: 0.8;
+    transform: rotate(45deg); border: 1.5px solid rgba(0,229,255,0.6);
+    cursor: pointer; transition: transform 0.15s, opacity 0.15s;
+}
+.mk-waterway:hover { transform: rotate(45deg) scale(1.5); opacity: 1; }
+.cable-corridor { cursor: pointer; transition: fill-opacity 0.15s; }
+.cable-corridor:hover { fill-opacity: 0.1 !important; stroke-opacity: 0.5 !important; }
 @keyframes glow-gold {
     0%,100% { box-shadow: 0 0 4px rgba(240,184,64,0.3); }
     50% { box-shadow: 0 0 16px rgba(240,184,64,0.7); }
@@ -597,8 +605,8 @@ $('#drawerToggle').addEventListener('click', function() {
 });
 
 // ════════════ DETAIL MODAL ════════════
-var COLORS = { earthquake: 'var(--red)', military: 'var(--blue)', conflict: 'var(--amber)', fire: 'var(--gold)', convergence: 'var(--purple)', nuclear: 'var(--green)', military_base: 'var(--teal)', port: 'var(--blue)', nuclear_facility: 'var(--gold)', pipeline: 'var(--purple)', exposure: '#e040fb' };
-var LABELS = { earthquake: 'EARTHQUAKE', military: 'MILITARY AIRCRAFT', conflict: 'CONFLICT EVENT', fire: 'WILDFIRE CLUSTER', convergence: 'SIGNAL CONVERGENCE', nuclear: 'NUCLEAR MONITOR', military_base: 'MILITARY BASE', port: 'STRATEGIC PORT', nuclear_facility: 'NUCLEAR FACILITY', pipeline: 'PIPELINE', exposure: 'POPULATION EXPOSURE' };
+var COLORS = { earthquake: 'var(--red)', military: 'var(--blue)', conflict: 'var(--amber)', fire: 'var(--gold)', convergence: 'var(--purple)', nuclear: 'var(--green)', military_base: 'var(--teal)', port: 'var(--blue)', nuclear_facility: 'var(--gold)', pipeline: 'var(--purple)', exposure: '#e040fb', waterway: 'var(--accent)', cable: 'var(--blue)' };
+var LABELS = { earthquake: 'EARTHQUAKE', military: 'MILITARY AIRCRAFT', conflict: 'CONFLICT EVENT', fire: 'WILDFIRE CLUSTER', convergence: 'SIGNAL CONVERGENCE', nuclear: 'NUCLEAR MONITOR', military_base: 'MILITARY BASE', port: 'STRATEGIC PORT', nuclear_facility: 'NUCLEAR FACILITY', pipeline: 'PIPELINE', exposure: 'POPULATION EXPOSURE', waterway: 'STRATEGIC WATERWAY', cable: 'CABLE CORRIDOR' };
 
 function showDetail(type, d) {
     var title = '', subtitle = '', fields = [], link = '';
@@ -1154,6 +1162,31 @@ function updateMapInfra(data) {
             });
         });
         line.addTo(mapLayers.infra);
+    });
+    // Strategic waterways (diamond markers at chokepoints)
+    var wws = (data.waterways && data.waterways.waterways) || [];
+    wws.forEach(function(w) {
+        if (w.lat == null || w.lon == null) return;
+        total++;
+        var mk = L.marker([w.lat, w.lon], {
+            icon: L.divIcon({ className: 'mk-waterway', iconSize: [10, 10], iconAnchor: [5, 5] })
+        });
+        mk.bindTooltip('<b>' + esc(w.name) + '</b><br><span style="opacity:0.7">' + esc(w.throughput || '') + '</span>', { className: 'mk-tip', direction: 'top', offset: [0, -6] });
+        mk.addTo(mapLayers.infra);
+    });
+    // Submarine cable corridors (shaded rectangles)
+    var cables = (data.cable_corridors && data.cable_corridors.corridors) || [];
+    cables.forEach(function(c) {
+        if (!c.lat_range || !c.lon_range) return;
+        total++;
+        var bounds = [[c.lat_range[0], c.lon_range[0]], [c.lat_range[1], c.lon_range[1]]];
+        var rect = L.rectangle(bounds, {
+            color: '#4da8ff', weight: 1, opacity: 0.2,
+            fillColor: '#4da8ff', fillOpacity: 0.04,
+            dashArray: '4 3', className: 'cable-corridor'
+        });
+        rect.bindTooltip('<b>' + esc(c.name.replace(/_/g, ' ')) + '</b><br><span style="opacity:0.7">' + (c.cables || []).join(', ') + '</span>', { className: 'mk-tip', sticky: true });
+        rect.addTo(mapLayers.infra);
     });
     $('#cntInfra').textContent = total;
 }
