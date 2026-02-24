@@ -54,6 +54,8 @@ def _find_exposed_cities(
                     exposed[cname] = {
                         "city": cname,
                         "country": city["country"],
+                        "lat": city["lat"],
+                        "lon": city["lon"],
                         "population": city["pop"],
                         "distance_km": round(dist, 1),
                         "nearest_event": event.get("type", "unknown"),

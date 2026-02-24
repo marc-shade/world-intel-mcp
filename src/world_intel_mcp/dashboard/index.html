@@ -503,6 +503,12 @@ a { color: var(--accent); text-decoration: none; }
         <span class="layer-count" id="cntInfra">0</span>
         <div class="toggle on" style="--lc:var(--teal)"><div class="knob"></div></div>
     </div>
+    <div class="layer-row" data-layer="exposure">
+        <span class="layer-dot" style="background:#e040fb"></span>
+        <span class="layer-label">Pop Exposure</span>
+        <span class="layer-count" id="cntExposure">0</span>
+        <div class="toggle on" style="--lc:#e040fb"><div class="knob"></div></div>
+    </div>
 </aside>
 
 <!-- DATA DRAWER -->
@@ -549,7 +555,7 @@ function ago(ts) { if (!ts) return '\u2014'; var s = Math.floor((Date.now() - ne
 var latestData = null;
 var map = null;
 var mapLayers = {};
-var layerState = { quakes: true, military: true, conflict: true, fires: true, convergence: true, nuclear: true, infra: true };
+var layerState = { quakes: true, military: true, conflict: true, fires: true, convergence: true, nuclear: true, infra: true, exposure: true };
 var drawerOpen = false;
 
 // ════════════ MAP INIT ════════════
@@ -564,6 +570,7 @@ function initMap() {
     mapLayers.convergence = L.layerGroup().addTo(map);
     mapLayers.nuclear = L.layerGroup().addTo(map);
     mapLayers.infra = L.layerGroup().addTo(map);
+    mapLayers.exposure = L.layerGroup().addTo(map);
 }
 
 // ════════════ LAYER TOGGLES ════════════
@@ -1116,6 +1123,38 @@ function updateMapInfra(data) {
     $('#cntInfra').textContent = total;
 }
 
+function updateMapExposure(data) {
+    mapLayers.exposure.clearLayers();
+    if (!data || data.error) { $('#cntExposure').textContent = '0'; return; }
+    var cities = data.exposed_cities || [];
+    var evtColors = { conflict: '#ff1744', earthquake: '#ff9100', wildfire: '#ffea00' };
+    $('#cntExposure').textContent = cities.length;
+    cities.forEach(function(c) {
+        if (c.lat == null || c.lon == null) return;
+        var color = evtColors[c.nearest_event] || '#e040fb';
+        var pop = c.population || 0;
+        var radius = Math.max(5, Math.min(22, Math.sqrt(pop / 400000)));
+        var circle = L.circleMarker([c.lat, c.lon], {
+            radius: radius, color: color, fillColor: color, fillOpacity: 0.3,
+            weight: 2, opacity: 0.7
+        });
+        var popStr = pop >= 1000000 ? (pop / 1000000).toFixed(1) + 'M' : (pop / 1000).toFixed(0) + 'K';
+        circle.bindTooltip(
+            '<b>' + esc(c.city) + '</b> (' + popStr + ')<br>' +
+            '<span style="color:' + color + '">' + esc(c.nearest_event) + '</span> ' + c.distance_km + 'km',
+            { className: 'mk-tip', direction: 'top' }
+        );
+        circle.on('click', function() {
+            showDetail('exposure', {
+                city: c.city, country: c.country, population: popStr,
+                nearest_event: c.nearest_event, event_detail: c.event_detail,
+                distance_km: c.distance_km
+            });
+        });
+        circle.addTo(mapLayers.exposure);
+    });
+}
+
 function updateAlertBanner(data) {
     var el = $('#alertBanner');
     if (!data || data.error || !data.alerts || !data.alerts.length) {
@@ -1187,6 +1226,14 @@ function updateHudStats(data) {
     if (data.nuclear_monitor && !data.nuclear_monitor.error && data.nuclear_monitor.critical_flags > 0) {
         pills.push('<div class="stat-pill"><span class="v crit">' + data.nuclear_monitor.critical_flags + '</span><span class="l">Nuke Flag</span></div>');
     }
+    if (data.strategic_posture && !data.strategic_posture.error) {
+        var ps = data.strategic_posture.composite_score || 0;
+        var psCls = ps >= 55 ? ' crit' : ps >= 35 ? ' warn' : '';
+        pills.push('<div class="stat-pill"><span class="v' + psCls + '">' + ps.toFixed(0) + '</span><span class="l">Posture</span></div>');
+    }
+    if (data.population_exposure && !data.population_exposure.error && data.population_exposure.exposed_city_count > 0) {
+        pills.push('<div class="stat-pill"><span class="v warn">' + (data.population_exposure.total_exposed_population_formatted || '0') + '</span><span class="l">Exposed</span></div>');
+    }
     $('#hudStats').innerHTML = safe(pills.join(''));
 }
 
@@ -1196,6 +1243,44 @@ function updateDrawer(data) {
     _drawerItems = {};
     _drawerIdx = 0;
     var h = '';
+
+    // ── STRATEGIC POSTURE ──
+    if (data.strategic_posture && !data.strategic_posture.error) {
+        var sp = data.strategic_posture;
+        var compScore = sp.composite_score || 0;
+        var riskLvl = sp.risk_level || 'UNKNOWN';
+        var riskColor = riskLvl === 'CRITICAL' ? 'var(--red)' : riskLvl === 'HIGH' ? 'var(--amber)' : riskLvl === 'ELEVATED' ? '#ff9100' : 'var(--green)';
+        h += '<div class="sh">STRATEGIC POSTURE</div>';
+        h += '<div style="display:flex;align-items:center;gap:12px;padding:6px 0">';
+        h += '<div style="font-size:2rem;font-weight:700;color:' + riskColor + '">' + compScore.toFixed(0) + '</div>';
+        h += '<div><div style="font-size:0.85rem;font-weight:600;color:' + riskColor + '">' + esc(riskLvl) + '</div>';
+        h += '<div class="dim" style="font-size:0.6rem">' + (sp.domains_assessed || 0) + ' domains assessed</div></div>';
+        h += '</div>';
+        var ds = sp.domain_scores || {};
+        h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px">';
+        for (var dk in ds) {
+            if (ds.hasOwnProperty(dk)) {
+                var dInfo = ds[dk];
+                var dScore = dInfo.score || 0;
+                var dColor = dScore >= 55 ? 'var(--red)' : dScore >= 35 ? 'var(--amber)' : 'var(--green)';
+                h += '<div style="text-align:center;padding:4px 2px;border-radius:4px;background:rgba(255,255,255,0.02)">';
+                h += '<div style="font-size:0.75rem;font-weight:600;color:' + dColor + '">' + dScore.toFixed(0) + '</div>';
+                h += '<div class="dim" style="font-size:0.5rem;text-transform:uppercase;letter-spacing:0.5px">' + esc(dk) + '</div>';
+                h += '</div>';
+            }
+        }
+        h += '</div>';
+        var threats = sp.top_threats || [];
+        if (threats.length) {
+            h += '<div class="sub" style="margin-top:6px">Top Threats</div>';
+            threats.slice(0, 5).forEach(function(t) {
+                h += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:0.62rem">';
+                h += '<span class="dim" style="min-width:50px;text-transform:uppercase;letter-spacing:0.5px">' + esc(t.domain) + '</span>';
+                h += '<span style="color:var(--bright);flex:1">' + esc(t.signal) + '</span>';
+                h += '</div>';
+            });
+        }
+    }
 
     // ── ALERTS ──
     if (data.alert_digest && !data.alert_digest.error && data.alert_digest.alert_count > 0) {
@@ -1615,6 +1700,29 @@ function updateDrawer(data) {
         }
     }
 
+    // ── FLEET ──
+    if (data.fleet_report && !data.fleet_report.error) {
+        var fr = data.fleet_report;
+        h += '<div class="sh">FLEET</div>';
+        var fScore = fr.readiness_score || 0;
+        var fColor = fScore >= 70 ? 'var(--red)' : fScore >= 40 ? 'var(--amber)' : 'var(--green)';
+        h += '<div class="mini-row">';
+        h += '<div class="mini-box"><div class="v" style="color:' + fColor + '">' + fScore + '</div><div class="l">Readiness</div></div>';
+        h += '<div class="mini-box"><div class="v">' + esc(fr.readiness_level || '\u2014') + '</div><div class="l">Level</div></div>';
+        h += '<div class="mini-box"><div class="v">' + (fr.total_tracked_aircraft || 0) + '</div><div class="l">Aircraft</div></div>';
+        h += '<div class="mini-box"><div class="v">' + (fr.surge_count || 0) + '</div><div class="l">Surges</div></div>';
+        h += '</div>';
+        var wws = fr.waterway_summary || [];
+        if (wws.length) {
+            h += '<div class="sub">Waterways</div><table class="dtable"><thead><tr><th>Waterway</th><th>Status</th><th>Warnings</th></tr></thead><tbody>';
+            wws.forEach(function(w) {
+                var sCls = w.status === 'critical' ? 'down' : w.status === 'elevated' ? 'warn' : w.status === 'advisory' ? 'warn' : 'dim';
+                h += '<tr><td class="bright">' + esc(trunc(w.name || '?', 22)) + '</td><td class="' + sCls + '">' + esc(w.status || '\u2014') + '</td><td class="dim">' + (w.warning_count || 0) + '</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+    }
+
     // ── SOCIAL ──
     if (data.social_signals && !data.social_signals.error) {
         var soc = data.social_signals;
@@ -1656,6 +1764,39 @@ function updateDrawer(data) {
                 var concern = s.highest_concern ? s.highest_concern.concern_level : 'none';
                 var cc = concern === 'critical' ? 'down' : concern === 'high' ? 'warn' : concern === 'elevated' ? 'warn' : 'dim';
                 h += '<tr><td class="bright">' + esc(s.name || '?') + '</td><td class="dim">' + esc(s.status || '\u2014') + '</td><td>' + (s.events_detected || 0) + '</td><td class="' + cc + '">' + esc(concern) + '</td></tr>';
+            });
+            h += '</tbody></table>';
+        }
+    }
+
+    // ── POPULATION EXPOSURE ──
+    if (data.population_exposure && !data.population_exposure.error && data.population_exposure.exposed_city_count > 0) {
+        var pe = data.population_exposure;
+        h += '<div class="sh">POPULATION EXPOSURE</div>';
+        h += '<div class="mini-row">';
+        h += '<div class="mini-box"><div class="v warn">' + esc(pe.total_exposed_population_formatted || '0') + '</div><div class="l">Total Exposed</div></div>';
+        h += '<div class="mini-box"><div class="v">' + (pe.exposed_city_count || 0) + '</div><div class="l">Cities</div></div>';
+        h += '<div class="mini-box"><div class="v">' + (pe.events_analyzed || 0) + '</div><div class="l">Events</div></div>';
+        h += '<div class="mini-box"><div class="v">' + (pe.radius_km || 200) + 'km</div><div class="l">Radius</div></div>';
+        h += '</div>';
+        var byType = pe.by_event_type || {};
+        if (Object.keys(byType).length) {
+            h += '<div class="mini-row">';
+            for (var etk in byType) {
+                if (byType.hasOwnProperty(etk)) {
+                    var etColor = etk === 'conflict' ? 'var(--red)' : etk === 'earthquake' ? 'var(--amber)' : '#ffea00';
+                    h += '<div class="mini-box"><div class="v" style="color:' + etColor + '">' + esc(byType[etk]) + '</div><div class="l">' + esc(etk) + '</div></div>';
+                }
+            }
+            h += '</div>';
+        }
+        var exCities = pe.exposed_cities || [];
+        if (exCities.length) {
+            h += '<table class="dtable"><thead><tr><th>City</th><th>Pop</th><th>Threat</th><th>Dist</th></tr></thead><tbody>';
+            exCities.slice(0, 15).forEach(function(c) {
+                var popStr = (c.population || 0) >= 1000000 ? ((c.population / 1000000).toFixed(1) + 'M') : ((c.population / 1000).toFixed(0) + 'K');
+                var tColor = c.nearest_event === 'conflict' ? 'down' : c.nearest_event === 'earthquake' ? 'warn' : 'warn';
+                h += '<tr><td class="bright">' + esc(c.city || '?') + '</td><td class="dim">' + popStr + '</td><td class="' + tColor + '">' + esc(c.nearest_event || '\u2014') + '</td><td class="dim">' + (c.distance_km || 0) + 'km</td></tr>';
             });
             h += '</tbody></table>';
         }
@@ -1757,6 +1898,7 @@ function updateAll(data) {
     updateMapConvergence(data.signal_convergence);
     updateMapNuclear(data.nuclear_monitor);
     updateMapInfra(data);
+    updateMapExposure(data.population_exposure);
 
     // Alert banner
     updateAlertBanner(data.alert_digest);

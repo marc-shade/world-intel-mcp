@@ -43,6 +43,9 @@ from world_intel_mcp.sources import (
     service_status,
 )
 from world_intel_mcp.analysis.alerts import fetch_alert_digest, fetch_weekly_trends
+from world_intel_mcp.analysis.posture import fetch_strategic_posture
+from world_intel_mcp.analysis.exposure import fetch_population_exposure
+from world_intel_mcp.sources.fleet import fetch_fleet_report
 from world_intel_mcp.config.countries import INTEL_HOTSPOTS
 from world_intel_mcp.config.geospatial import MILITARY_BASES, STRATEGIC_PORTS, PIPELINES, NUCLEAR_FACILITIES
 
@@ -108,6 +111,9 @@ async def _fetch_overview() -> dict:
         "alert_digest": fetch_alert_digest(fetcher),
         "weekly_trends": fetch_weekly_trends(fetcher),
         "service_status": service_status.fetch_service_status(fetcher),
+        "strategic_posture": fetch_strategic_posture(fetcher),
+        "fleet_report": fetch_fleet_report(fetcher),
+        "population_exposure": fetch_population_exposure(fetcher),
     }
 
     gathered = await asyncio.gather(
