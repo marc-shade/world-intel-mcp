@@ -289,8 +289,8 @@ a { color: var(--accent); text-decoration: none; }
 
 /* ═══════════════ ALERT BANNER ═══════════════ */
 #alertBanner {
-    position: fixed; top: 54px; left: 220px; right: 360px; z-index: 45;
-    max-height: 0; overflow: hidden; transition: max-height 0.4s var(--ease);
+    position: fixed; top: var(--layers-top, 66px); left: 220px; right: 360px; z-index: 45;
+    max-height: 0; overflow: hidden; transition: max-height 0.4s var(--ease), top 0.2s;
 }
 #alertBanner.show { max-height: 90px; }
 .alert-strip {
@@ -2625,12 +2625,17 @@ $('#layers .panel-title').addEventListener('click', function() {
     $('#layers').classList.toggle('layers-open');
 });
 
-// Auto-position layer panel below topbar
+// Auto-position layer panel + alert banner below topbar
 function _syncLayersTop() {
     var tb = $('#topBar');
     if (tb) {
         var h = tb.offsetHeight;
-        document.documentElement.style.setProperty('--layers-top', (h + 16) + 'px');
+        var bannerTop = h + 16;
+        document.documentElement.style.setProperty('--layers-top', bannerTop + 'px');
+        // Push layers below the alert banner if it's showing
+        var banner = $('#alertBanner');
+        var bannerH = (banner && banner.classList.contains('show')) ? banner.offsetHeight + 4 : 0;
+        $('#layers').style.top = (bannerTop + bannerH) + 'px';
     }
 }
 _syncLayersTop();
