@@ -203,7 +203,7 @@ async def fetch_acled_events(
 # UCDP: Uppsala Conflict Data Program (GED API)
 # ---------------------------------------------------------------------------
 
-_UCDP_GED_URL = "https://ucdpapi.pcr.uu.se/api/gedevents/24.1"
+_UCDP_GED_URL = "https://ucdpapi.pcr.uu.se/api/gedevents/25.1"
 
 _VIOLENCE_TYPES = {
     1: "state-based",
@@ -219,8 +219,9 @@ async def fetch_ucdp_events(
 ) -> dict:
     """Fetch recent conflict events from the UCDP GED API.
 
-    No API key required.  Fetches multiple pages in parallel when the
-    dataset spans more than one page.
+    Optionally uses ``UCDP_ACCESS_TOKEN`` if set (required since 2026).
+    Fetches multiple pages in parallel when the dataset spans more than
+    one page.
 
     Args:
         fetcher: Shared HTTP fetcher with caching and circuit breaking.
@@ -235,6 +236,11 @@ async def fetch_ucdp_events(
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=days)
 
+    ucdp_headers: dict[str, str] = {}
+    ucdp_token = os.environ.get("UCDP_ACCESS_TOKEN")
+    if ucdp_token:
+        ucdp_headers["x-ucdp-access-token"] = ucdp_token
+
     # Fetch page 1 to discover total pages (UCDP is slow — 30s timeout)
     page1_data = await fetcher.get_json(
         _UCDP_GED_URL,
@@ -242,6 +248,7 @@ async def fetch_ucdp_events(
         cache_key=f"conflict:ucdp:{days}:page1",
         cache_ttl=21600,
         params={"pagesize": min(limit, 1000), "page": 0},
+        headers=ucdp_headers or None,
         timeout=30.0,
     )
 
@@ -268,6 +275,7 @@ async def fetch_ucdp_events(
                 cache_key=f"conflict:ucdp:{days}:page{p}",
                 cache_ttl=21600,
                 params={"pagesize": min(limit, 1000), "page": p},
+                headers=ucdp_headers or None,
                 timeout=30.0,
             )
             for p in range(1, total_pages)
