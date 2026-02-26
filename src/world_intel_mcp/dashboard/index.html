@@ -140,6 +140,14 @@ a { color: var(--accent); text-decoration: none; }
     padding: 5px 0; cursor: pointer; transition: opacity 0.2s;
 }
 .layer-row:hover { opacity: 0.85; }
+.rgn-btn {
+    font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.5px;
+    padding: 3px 7px; border: 1px solid rgba(255,255,255,0.12); border-radius: 4px;
+    background: rgba(255,255,255,0.04); color: var(--dim); cursor: pointer;
+    transition: all 0.15s;
+}
+.rgn-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.rgn-btn.active { background: rgba(0,229,255,0.15); color: var(--accent); border-color: rgba(0,229,255,0.3); }
 .layer-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .layer-label { font-size: 0.75rem; color: var(--text); flex: 1; }
 .layer-count {
@@ -403,6 +411,21 @@ a { color: var(--accent); text-decoration: none; }
     cursor: pointer; transition: transform 0.15s, opacity 0.15s;
 }
 .mk-waterway:hover { transform: rotate(45deg) scale(1.5); opacity: 1; }
+.mk-chokepoint {
+    width: 8px; height: 8px; background: #ff5722; border-radius: 50%; opacity: 0.9;
+    border: 1.5px solid rgba(255,87,34,0.6); cursor: pointer; transition: transform 0.15s;
+}
+.mk-chokepoint:hover { transform: scale(1.8); }
+.mk-canal {
+    width: 8px; height: 8px; background: #ffab00; border-radius: 2px; opacity: 0.9;
+    border: 1.5px solid rgba(255,171,0,0.6); cursor: pointer; transition: transform 0.15s;
+}
+.mk-canal:hover { transform: scale(1.8); }
+.mk-sealane {
+    width: 6px; height: 6px; background: #00bfa5; border-radius: 50%; opacity: 0.7;
+    border: 1px solid rgba(0,191,165,0.5); cursor: pointer; transition: transform 0.15s;
+}
+.mk-sealane:hover { transform: scale(1.8); }
 .cable-corridor { cursor: pointer; transition: fill-opacity 0.15s; }
 .cable-corridor:hover { fill-opacity: 0.1 !important; stroke-opacity: 0.5 !important; }
 .mk-plane {
@@ -653,6 +676,27 @@ a { color: var(--accent); text-decoration: none; }
         <span class="layer-label">News</span>
         <span class="layer-count" id="cntNews">0</span>
         <div class="toggle on" style="--lc:var(--accent)"><div class="knob"></div></div>
+    </div>
+    <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:4px;padding-top:6px">
+        <div style="font-size:0.55rem;letter-spacing:1px;color:rgba(255,255,255,0.35);margin-bottom:4px">REGION</div>
+        <div id="regionPresets" style="display:flex;flex-wrap:wrap;gap:2px">
+            <button class="rgn-btn active" data-region="global">Globe</button>
+            <button class="rgn-btn" data-region="americas">Americas</button>
+            <button class="rgn-btn" data-region="europe">Europe</button>
+            <button class="rgn-btn" data-region="mena">MENA</button>
+            <button class="rgn-btn" data-region="asia">Asia-Pac</button>
+            <button class="rgn-btn" data-region="africa">Africa</button>
+        </div>
+    </div>
+    <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:4px;padding-top:6px">
+        <div style="font-size:0.55rem;letter-spacing:1px;color:rgba(255,255,255,0.35);margin-bottom:4px">TIME WINDOW</div>
+        <div id="timeFilter" style="display:flex;gap:2px">
+            <button class="rgn-btn" data-hours="1">1h</button>
+            <button class="rgn-btn" data-hours="6">6h</button>
+            <button class="rgn-btn active" data-hours="24">24h</button>
+            <button class="rgn-btn" data-hours="168">7d</button>
+            <button class="rgn-btn" data-hours="0">All</button>
+        </div>
     </div>
 </aside>
 
@@ -1271,7 +1315,9 @@ document.addEventListener('keydown', function(e) {
 function updateMapQuakes(data) {
     mapLayers.quakes.clearLayers();
     if (!data || data.error) { $('#cntQuakes').textContent = '0'; return; }
-    var quakes = data.earthquakes || [];
+    var quakes = (data.earthquakes || []).filter(function(q) {
+        return _withinTimeWindow(q.time || q.timestamp);
+    });
     $('#cntQuakes').textContent = quakes.length;
     quakes.slice(0, 100).forEach(function(q) {
         if (q.latitude == null || q.longitude == null) return;
@@ -1490,6 +1536,27 @@ function updateMapInfra(data) {
         mk.bindTooltip('<b>' + esc(w.name) + '</b><br><span style="opacity:0.7">' + esc(w.throughput || '') + '</span>', { className: 'mk-tip', direction: 'top', offset: [0, -6] });
         mk.addTo(mapLayers.infra);
     });
+    // Trade routes / maritime chokepoints (anchor markers)
+    var trs = (data.trade_routes && data.trade_routes.routes) || [];
+    trs.forEach(function(tr) {
+        if (tr.lat == null || tr.lon == null) return;
+        total++;
+        var iconCls = tr.type === 'chokepoint' ? 'mk-chokepoint' : tr.type === 'canal' ? 'mk-canal' : 'mk-sealane';
+        var mk = L.marker([tr.lat, tr.lon], {
+            icon: L.divIcon({ className: iconCls, iconSize: [8, 8], iconAnchor: [4, 4] })
+        });
+        mk.bindTooltip('<b>' + esc(tr.name) + '</b><br>' +
+            '<span style="opacity:0.7">' + esc(tr.type) + ' · ' + (tr.oil_flow_mbd || 0) + ' mbd oil · ~' + (tr.daily_vessel_transits || 0) + ' vessels/day</span>',
+            { className: 'mk-tip', direction: 'top', offset: [0, -5] });
+        mk.on('click', function() {
+            showDetail('trade_route', {
+                name: tr.name, type: tr.type, oil_flow_mbd: tr.oil_flow_mbd,
+                daily_transits: tr.daily_vessel_transits, trade_value_pct: tr.trade_value_pct,
+                countries: (tr.countries || []).join(', '), notes: tr.notes
+            });
+        });
+        mk.addTo(mapLayers.infra);
+    });
     // Submarine cable corridors (shaded rectangles)
     var cables = (data.cable_corridors && data.cable_corridors.corridors) || [];
     var cableStyle = { color: '#4da8ff', weight: 1, opacity: 0.2, fillColor: '#4da8ff', fillOpacity: 0.04, dashArray: '4 3', className: 'cable-corridor', interactive: false };
@@ -1677,7 +1744,9 @@ function _geolocateArticle(article) {
 function updateMapNews(data) {
     mapLayers.news.clearLayers();
     if (!data || data.error) { $('#cntNews').textContent = '0'; return; }
-    var articles = data.articles || data.items || [];
+    var articles = (data.articles || data.items || []).filter(function(a) {
+        return _withinTimeWindow(a.published || a.pub_date || a.timestamp);
+    });
     var placed = 0;
     articles.forEach(function(a) {
         var geo = _geolocateArticle(a);
@@ -2488,6 +2557,46 @@ function updateDrawer(data) {
         });
     }
 
+    // ── BTC TECHNICALS ──
+    if (data.btc_technicals && !data.btc_technicals.error && data.btc_technicals.price) {
+        var bt = data.btc_technicals;
+        h += '<div class="sh">BTC TECHNICALS</div>';
+        var crossCls = bt.cross_signal === 'golden_cross' ? 'good' : bt.cross_signal === 'death_cross' ? 'crit' : 'dim';
+        var crossLabel = bt.cross_signal === 'golden_cross' ? 'GOLDEN CROSS' : bt.cross_signal === 'death_cross' ? 'DEATH CROSS' : 'NEUTRAL';
+        h += '<div class="mini-boxes" style="margin:6px 0">';
+        h += '<div class="mini-box"><div class="v">$' + num(bt.price) + '</div><div class="l">BTC Price</div></div>';
+        h += '<div class="mini-box"><div class="v">' + (bt.mayer_multiple || '—') + '</div><div class="l">Mayer Multiple</div></div>';
+        h += '<div class="mini-box"><div class="v ' + crossCls + '">' + crossLabel + '</div><div class="l">Signal</div></div>';
+        h += '</div>';
+        h += '<div style="font-size:0.65rem;padding:2px 0"><span class="bright">SMA-50</span> <span class="dim">$' + num(bt.sma_50) + '</span></div>';
+        if (bt.sma_200) h += '<div style="font-size:0.65rem;padding:1px 0"><span class="bright">SMA-200</span> <span class="dim">$' + num(bt.sma_200) + '</span></div>';
+        if (bt.change_7d_pct != null) {
+            var c7 = bt.change_7d_pct >= 0 ? 'good' : 'crit';
+            h += '<div style="font-size:0.65rem;padding:1px 0"><span class="bright">7d</span> <span class="' + c7 + '">' + (bt.change_7d_pct > 0 ? '+' : '') + bt.change_7d_pct + '%</span>';
+            if (bt.change_30d_pct != null) {
+                var c30 = bt.change_30d_pct >= 0 ? 'good' : 'crit';
+                h += ' <span class="bright">30d</span> <span class="' + c30 + '">' + (bt.change_30d_pct > 0 ? '+' : '') + bt.change_30d_pct + '%</span>';
+            }
+            h += '</div>';
+        }
+        if (bt.ath_distance_pct != null) h += '<div style="font-size:0.65rem;padding:1px 0"><span class="bright">From ATH</span> <span class="dim">' + bt.ath_distance_pct + '%</span></div>';
+    }
+
+    // ── CENTRAL BANK RATES ──
+    if (data.central_bank_rates && !data.central_bank_rates.error && (data.central_bank_rates.rates || []).length > 0) {
+        var cbr = data.central_bank_rates;
+        h += '<div class="sh">CENTRAL BANK RATES</div>';
+        h += '<div class="dim" style="font-size:0.6rem;padding:2px 0">' + cbr.count + ' banks' + (cbr.fred_available ? ' (FRED live)' : ' (curated)') + '</div>';
+        cbr.rates.forEach(function(r) {
+            var rateCls = r.rate >= 10 ? 'crit' : r.rate >= 5 ? 'warn' : r.rate >= 2 ? 'bright' : 'good';
+            h += '<div style="font-size:0.65rem;padding:1px 0">';
+            h += '<span class="' + rateCls + '" style="min-width:40px;display:inline-block;text-align:right">' + r.rate.toFixed(2) + '%</span> ';
+            h += '<span class="bright">' + esc(r.label) + '</span>';
+            if (r.country) h += ' <span class="dim">(' + esc(r.country) + ')</span>';
+            h += '</div>';
+        });
+    }
+
     // ── DATA FRESHNESS ──
     if (data.cache_freshness && Object.keys(data.cache_freshness).length > 0) {
         var cf = data.cache_freshness;
@@ -2550,8 +2659,11 @@ function updateTicker(data) {
 
 // ════════════ MASTER UPDATE ════════════
 
+function refreshDashboard(data) { updateAll(data); }
+
 function updateAll(data) {
     latestData = data;
+    window._lastSSEData = data;
 
     // Map layers (each wrapped to prevent cascade failures)
     var conflictData = (data.acled_events && !data.acled_events.error && data.acled_events.count > 0) ? data.acled_events
@@ -2780,6 +2892,72 @@ window.addEventListener('resize', _syncLayersTop);
 // Show loading indicator until SSE data arrives
 $('#hudStats').innerHTML = '<div class="stat-pill"><span class="l" style="animation:pulse-dot 2s ease-in-out infinite">LOADING LIVE FEEDS</span></div>';
 $('#drawerBody').innerHTML = '<div style="padding:30px;text-align:center"><div class="load-ring" style="width:28px;height:28px;margin:0 auto 10px"></div><div class="dim" style="font-size:0.6rem;letter-spacing:1.5px">LOADING INTELLIGENCE FEEDS</div></div>';
+
+// ═══════════ REGIONAL PRESETS ═══════════
+var REGION_VIEWS = {
+    global: { center: [20, 0], zoom: 3 },
+    americas: { center: [10, -80], zoom: 4 },
+    europe: { center: [50, 15], zoom: 5 },
+    mena: { center: [28, 40], zoom: 5 },
+    asia: { center: [20, 110], zoom: 4 },
+    africa: { center: [0, 25], zoom: 4 },
+};
+$$('#regionPresets .rgn-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var region = btn.dataset.region;
+        var view = REGION_VIEWS[region];
+        if (!view) return;
+        $$('#regionPresets .rgn-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        map.flyTo(view.center, view.zoom, { duration: 1.2 });
+        try { localStorage.setItem('phoenix-region', region); } catch(e) {}
+    });
+});
+// Restore saved region
+try {
+    var savedRegion = localStorage.getItem('phoenix-region');
+    if (savedRegion && REGION_VIEWS[savedRegion]) {
+        $$('#regionPresets .rgn-btn').forEach(function(b) {
+            b.classList.toggle('active', b.dataset.region === savedRegion);
+        });
+        var sv = REGION_VIEWS[savedRegion];
+        map.setView(sv.center, sv.zoom);
+    }
+} catch(e) {}
+
+// ═══════════ TIME WINDOW FILTER ═══════════
+var _timeFilterHours = 24;
+$$('#timeFilter .rgn-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        _timeFilterHours = parseInt(btn.dataset.hours) || 0;
+        $$('#timeFilter .rgn-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        try { localStorage.setItem('phoenix-time-filter', String(_timeFilterHours)); } catch(e) {}
+        // Re-render with current data if available
+        if (window._lastSSEData) refreshDashboard(window._lastSSEData);
+    });
+});
+// Restore saved time filter
+try {
+    var savedTime = localStorage.getItem('phoenix-time-filter');
+    if (savedTime !== null) {
+        _timeFilterHours = parseInt(savedTime) || 0;
+        $$('#timeFilter .rgn-btn').forEach(function(b) {
+            b.classList.toggle('active', b.dataset.hours === savedTime);
+        });
+    }
+} catch(e) {}
+
+// Time filter helper: check if an ISO timestamp is within the active window
+function _withinTimeWindow(isoTimestamp) {
+    if (_timeFilterHours === 0) return true; // "All" = no filter
+    if (!isoTimestamp) return true; // No timestamp = show
+    try {
+        var ts = new Date(isoTimestamp).getTime();
+        var cutoff = Date.now() - (_timeFilterHours * 3600000);
+        return ts >= cutoff;
+    } catch(e) { return true; }
+}
 
 // Load static geospatial data immediately (bases, ports, nuclear facilities).
 fetch('/api/static')

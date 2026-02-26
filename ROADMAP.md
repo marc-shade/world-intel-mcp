@@ -2,7 +2,7 @@
 
 **Benchmark**: [koala73/worldmonitor](https://github.com/koala73/worldmonitor)
 **Updated**: 2026-02-26
-**Current tools**: 80 (79 intel + 1 status)
+**Current tools**: 84 (83 intel + 1 status)
 
 ---
 
@@ -18,7 +18,7 @@
 
 ## 1. Data Sources — Complete Inventory
 
-### Markets & Economics (11 tools)
+### Markets & Economics (13 tools)
 | Tool | WM Equivalent | Status |
 |------|---------------|--------|
 | `intel_market_quotes` | `list-market-quotes` | :white_check_mark: |
@@ -32,6 +32,8 @@
 | `intel_fred_series` | `get-fred-series` | :white_check_mark: |
 | `intel_world_bank_indicators` | `list-world-bank-indicators` | :white_check_mark: |
 | `intel_country_stocks` | Country main index ticker | :white_check_mark: |
+| `intel_btc_technicals` | BTC SMA-50/200, Mayer Multiple, cross signals | :white_check_mark: |
+| `intel_central_bank_rates` | 15 central bank policy rates (FRED + curated) | :white_check_mark: |
 
 ### Natural Disasters & Climate (5 tools)
 | Tool | WM Equivalent | Status |
@@ -176,6 +178,9 @@
 | Spaceports | 27 launch facilities | `intel_spaceports` | :white_check_mark: |
 | Critical minerals | 27 deposit types | `intel_critical_minerals` | :white_check_mark: |
 | Stock exchanges | 82 global exchanges | `intel_stock_exchanges` | :white_check_mark: |
+| Trade routes | 19 maritime chokepoints/routes | `intel_trade_routes` | :white_check_mark: |
+| Cloud regions | 28 AWS/Azure/GCP regions | `intel_cloud_regions` | :white_check_mark: |
+| Financial centers | 20 GFCI-ranked cities | `intel_financial_centers` | :white_check_mark: |
 
 ---
 
@@ -210,10 +215,12 @@ Live Starlette app with SSE streaming at `intel-dashboard --port 8501`.
 
 | Feature | Status |
 |---------|--------|
-| SSE streaming (30s refresh) | :white_check_mark: 37 data streams |
-| Leaflet map (14 layers + 6 static) | :white_check_mark: |
-| 12 expandable drawer sections | :white_check_mark: |
+| SSE streaming (30s refresh) | :white_check_mark: 39 data streams |
+| Leaflet map (14 layers + 6 static + trade routes) | :white_check_mark: |
+| 14 expandable drawer sections | :white_check_mark: |
 | USNI Fleet Tracker drawer | :white_check_mark: |
+| BTC Technicals drawer (SMA, Mayer, cross signals) | :white_check_mark: |
+| Central Bank Rates drawer (15 banks) | :white_check_mark: |
 | Data freshness monitoring drawer | :white_check_mark: |
 | Per-source circuit breaker health | :white_check_mark: |
 | AI situation brief (Ollama-powered) | :white_check_mark: |
@@ -266,16 +273,21 @@ Composite strategic posture assessment from 9 weighted domains (military, politi
 
 Static datasets completed: 34 undersea cables, 48 AI datacenters, 27 spaceports, 27 critical mineral deposits, 82 stock exchanges. USNI Fleet Tracker for Navy disposition. RSS feeds expanded to 90+ across 16 categories (added Latin America 8+, multilingual ES/FR/DE 7+). Data freshness monitoring added to dashboard. Static HTML report generation removed (live dashboard replaces).
 
+### Phase 12: Financial Intelligence & Geospatial Expansion (+5 = 84 tools)
+`intel_btc_technicals`, `intel_central_bank_rates`, `intel_trade_routes`, `intel_cloud_regions`, `intel_financial_centers`
+
+BTC technical analysis with SMA-50/200, Mayer Multiple, golden/death cross signals, and ATH distance via CoinGecko historical data. Central bank policy rates for 15 major banks (Fed, ECB, BoE, BoJ, PBoC, RBI, RBA, BoC, SNB, BCB, BoK, CBRT, SARB, Banxico, BI) — live FRED data when API key set, curated fallback otherwise. Static geospatial datasets: 19 maritime trade routes/chokepoints with oil flow and vessel transit data, 28 cloud provider regions (AWS/Azure/GCP), 20 GFCI-ranked financial centers. Trade route markers added to dashboard infrastructure map layer. BTC technicals and central bank rates added to dashboard drawer.
+
 ---
 
 ## Summary
 
 | Category | Have | Benchmark | Coverage |
 |----------|------|-----------|----------|
-| Data source tools | 80 | 42 | **190%** |
+| Data source tools | 84 | 42 | **200%** |
 | Analysis engines | 19 | 15 | **127%** |
-| Static datasets | 15 | 12 | **125%** |
+| Static datasets | 18 | 12 | **150%** |
 | RSS feeds | 90+ | 150+ | 60% |
 | Strategic synthesis | Posture + brief + fleet + exposure + USNI | Dashboard-only | **Exceeds** |
 
-**Bottom line**: 80 tools across 30 domains, exceeding WorldMonitor benchmark by 90% in tool count, 27% in analysis engines, and 25% in static datasets. All phases 1-11 complete. Live Starlette dashboard with 37 SSE streams, 14 map layers, and data freshness monitoring. No remaining critical gaps — only niche sources (Wingbits requires API key, PizzInt has no public API).
+**Bottom line**: 84 tools across 30+ domains, exactly 2x WorldMonitor benchmark in tool count, 27% more analysis engines, and 50% more static datasets. All phases 1-12 complete. Live Starlette dashboard with 39 SSE streams, 14 map layers (with trade route markers), and data freshness monitoring.

@@ -21,6 +21,8 @@ Phase 11: Strategic synthesis — strategic posture, world brief, fleet report, 
 Phase 12: Extended geospatial (cables, datacenters, spaceports, minerals, exchanges), country stocks,
           aircraft batch, Hacker News, GitHub trending, arXiv papers, USA spending,
           NASA EONET, GDACS disaster alerts (+14 = 82 tools).
+Phase 13: USNI fleet tracker, RSS expansion, report removal.
+Phase 14: BTC technicals, central bank rates, trade routes, cloud regions, financial centers (+5 = 87 tools).
 """
 
 import asyncio
@@ -36,7 +38,7 @@ from mcp.types import Tool, TextContent
 from .cache import Cache
 from .circuit_breaker import CircuitBreaker
 from .fetcher import Fetcher
-from .sources import markets, economic, seismology, wildfire, conflict, military, infrastructure, maritime, climate, news, intelligence, prediction, displacement, aviation, cyber, space_weather, ai_watch, health, sanctions, elections, shipping, social, nuclear, service_status, geospatial, hacker_news, github_trending, arxiv_papers, usa_spending, environmental, usni_fleet
+from .sources import markets, economic, seismology, wildfire, conflict, military, infrastructure, maritime, climate, news, intelligence, prediction, displacement, aviation, cyber, space_weather, ai_watch, health, sanctions, elections, shipping, social, nuclear, service_status, geospatial, hacker_news, github_trending, arxiv_papers, usa_spending, environmental, usni_fleet, central_banks
 
 logging.basicConfig(
     level=os.environ.get("WORLD_INTEL_LOG_LEVEL", "INFO"),
@@ -851,6 +853,54 @@ TOOLS: list[Tool] = [
             },
         },
     ),
+    # --- BTC Technicals (1 tool) ---
+    Tool(
+        name="intel_btc_technicals",
+        description="Bitcoin technical indicators: SMA-50, SMA-200, Mayer Multiple, golden/death cross, distance from ATH, 7d/30d changes.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    # --- Central Banks (1 tool) ---
+    Tool(
+        name="intel_central_bank_rates",
+        description="Policy rates for 15 major central banks: Fed, ECB, BoE, BoJ, PBoC, RBI, RBA, BoC, SNB, BCB, BoK, CBRT, SARB, Banxico, BI. Live FRED data when API key set, curated fallback otherwise.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    # --- Trade Routes (1 tool) ---
+    Tool(
+        name="intel_trade_routes",
+        description="19 critical maritime chokepoints and trade routes with oil flow (mbd), daily vessel transits, trade value share. Optional: route_type (chokepoint/canal/route), country (ISO-3).",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "route_type": {"type": "string", "description": "Filter: chokepoint, canal, route"},
+                "country": {"type": "string", "description": "Filter by ISO-3 country code"},
+            },
+        },
+    ),
+    # --- Cloud Regions (1 tool) ---
+    Tool(
+        name="intel_cloud_regions",
+        description="28 major cloud provider regions (AWS, Azure, GCP) with coordinates, zone counts, and launch dates. Optional: provider, country.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "provider": {"type": "string", "description": "Filter: AWS, Azure, GCP"},
+                "country": {"type": "string", "description": "Filter by region name substring"},
+            },
+        },
+    ),
+    # --- Financial Centers (1 tool) ---
+    Tool(
+        name="intel_financial_centers",
+        description="GFCI top 20 global financial centers with rankings, ratings, specializations, and exchange info. Optional: country (ISO-3), min_rank.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "country": {"type": "string", "description": "Filter by ISO-3 country code"},
+                "min_rank": {"type": "integer", "description": "Only include centers ranked this or better"},
+            },
+        },
+    ),
     # --- System (1 tool) ---
     Tool(
         name="intel_status",
@@ -1205,6 +1255,35 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
         case "intel_usni_fleet":
             return await usni_fleet.fetch_usni_fleet(fetcher)
 
+        # BTC Technicals
+        case "intel_btc_technicals":
+            return await markets.fetch_btc_technicals(fetcher)
+
+        # Central Bank Rates
+        case "intel_central_bank_rates":
+            return await central_banks.fetch_central_bank_rates(fetcher)
+
+        # Trade Routes
+        case "intel_trade_routes":
+            return await geospatial.fetch_trade_routes(
+                route_type=arguments.get("route_type"),
+                country=arguments.get("country"),
+            )
+
+        # Cloud Regions
+        case "intel_cloud_regions":
+            return await geospatial.fetch_cloud_regions(
+                provider=arguments.get("provider"),
+                country=arguments.get("country"),
+            )
+
+        # Financial Centers
+        case "intel_financial_centers":
+            return await geospatial.fetch_financial_centers(
+                country=arguments.get("country"),
+                min_rank=arguments.get("min_rank"),
+            )
+
         # Environmental
         case "intel_environmental_events":
             return await environmental.fetch_environmental_events(
@@ -1274,7 +1353,7 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
                     "social": ["reddit-public"],
                     "nuclear": ["usgs-nuclear-monitor"],
                     "service_status": ["aws", "azure", "gcp", "cloudflare", "github"],
-                    "geospatial": ["static-datasets (bases, ports, pipelines, nuclear, cables, datacenters, spaceports, minerals, exchanges)"],
+                    "geospatial": ["static-datasets (bases, ports, pipelines, nuclear, cables, datacenters, spaceports, minerals, exchanges, trade-routes, cloud-regions, financial-centers)"],
                     "nlp": ["regex-ner", "keyword-classifier", "jaccard-clustering", "keyword-spike-detector"],
                     "synthesis": ["strategic-posture", "world-brief", "fleet-report", "population-exposure"],
                     "tech": ["hackernews", "github", "arxiv"],

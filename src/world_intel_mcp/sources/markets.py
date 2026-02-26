@@ -446,6 +446,72 @@ async def fetch_country_stocks(
     }
 
 
+async def fetch_btc_technicals(fetcher: Fetcher) -> dict:
+    """Compute Bitcoin technical indicators from CoinGecko historical data.
+
+    Calculates SMA-50, SMA-200, Mayer Multiple (price/SMA200), golden/death
+    cross status, and distance from all-time high.
+
+    Returns::
+
+        {"price": float, "sma_50": float, "sma_200": float,
+         "mayer_multiple": float, "cross_signal": str, ...}
+    """
+    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+    data = await fetcher.get_json(
+        url,
+        source="coingecko",
+        cache_key="markets:btc_technicals",
+        cache_ttl=600,
+        params={"vs_currency": "usd", "days": "200", "interval": "daily"},
+    )
+
+    if data is None or "prices" not in data:
+        return {"error": "Failed to fetch BTC historical data", "source": "coingecko", "timestamp": _utc_now_iso()}
+
+    prices = [p[1] for p in data["prices"]]
+    if len(prices) < 50:
+        return {"error": "Insufficient price history", "source": "coingecko", "timestamp": _utc_now_iso()}
+
+    current_price = prices[-1]
+
+    sma_50 = sum(prices[-50:]) / 50
+    sma_200 = sum(prices[-200:]) / min(len(prices), 200) if len(prices) >= 50 else None
+
+    mayer_multiple = round(current_price / sma_200, 4) if sma_200 and sma_200 > 0 else None
+
+    # Golden cross: SMA50 > SMA200, Death cross: SMA50 < SMA200
+    cross_signal = "neutral"
+    if sma_200 is not None:
+        if sma_50 > sma_200:
+            cross_signal = "golden_cross"
+        elif sma_50 < sma_200:
+            cross_signal = "death_cross"
+
+    # Distance from ATH
+    ath = max(prices)
+    ath_distance_pct = round(((current_price - ath) / ath) * 100, 2) if ath > 0 else None
+
+    # 7d and 30d price change
+    change_7d = round(((current_price - prices[-8]) / prices[-8]) * 100, 2) if len(prices) >= 8 else None
+    change_30d = round(((current_price - prices[-31]) / prices[-31]) * 100, 2) if len(prices) >= 31 else None
+
+    return {
+        "price": round(current_price, 2),
+        "sma_50": round(sma_50, 2),
+        "sma_200": round(sma_200, 2) if sma_200 else None,
+        "mayer_multiple": mayer_multiple,
+        "cross_signal": cross_signal,
+        "ath_in_period": round(ath, 2),
+        "ath_distance_pct": ath_distance_pct,
+        "change_7d_pct": change_7d,
+        "change_30d_pct": change_30d,
+        "data_points": len(prices),
+        "source": "coingecko",
+        "timestamp": _utc_now_iso(),
+    }
+
+
 async def fetch_macro_signals(fetcher: Fetcher) -> dict:
     """Aggregate 7 macro signals into a single dashboard payload.
 

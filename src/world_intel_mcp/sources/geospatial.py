@@ -22,6 +22,7 @@ from ..config.datacenters import AI_DATACENTERS, query_datacenters
 from ..config.spaceports import SPACEPORTS, query_spaceports
 from ..config.minerals import CRITICAL_MINERALS, query_minerals
 from ..config.exchanges import STOCK_EXCHANGES, query_exchanges
+from ..config.trade_routes import TRADE_ROUTES, CLOUD_REGIONS, FINANCIAL_CENTERS
 
 
 def _utc_now_iso() -> str:
@@ -292,6 +293,105 @@ async def fetch_stock_exchanges(
         "total_market_cap_usd_t": round(total_mcap, 2),
         "by_tier": by_tier,
         "filters": {"tier": tier, "country": country, "currency": currency},
+        "source": "static-geospatial",
+        "timestamp": _utc_now_iso(),
+    }
+
+
+async def fetch_trade_routes(
+    route_type: str | None = None,
+    country: str | None = None,
+) -> dict:
+    """Query maritime trade routes and chokepoints.
+
+    Args:
+        route_type: Filter by type (chokepoint, canal, route).
+        country: Filter by ISO-3 country code in the countries list.
+    """
+    routes = list(TRADE_ROUTES)
+    if route_type:
+        routes = [r for r in routes if r["type"] == route_type.lower()]
+    if country:
+        c = country.upper()
+        routes = [r for r in routes if c in r.get("countries", [])]
+
+    total_oil = sum(r.get("oil_flow_mbd", 0) for r in routes)
+    by_type: dict[str, int] = {}
+    for r in routes:
+        by_type[r["type"]] = by_type.get(r["type"], 0) + 1
+
+    return {
+        "routes": routes,
+        "count": len(routes),
+        "total_in_database": len(TRADE_ROUTES),
+        "total_oil_flow_mbd": round(total_oil, 1),
+        "by_type": by_type,
+        "filters": {"route_type": route_type, "country": country},
+        "source": "static-geospatial",
+        "timestamp": _utc_now_iso(),
+    }
+
+
+async def fetch_cloud_regions(
+    provider: str | None = None,
+    country: str | None = None,
+) -> dict:
+    """Query major cloud provider regions (AWS, Azure, GCP).
+
+    Args:
+        provider: Filter by provider (AWS, Azure, GCP).
+        country: Filter by region name substring.
+    """
+    regions = list(CLOUD_REGIONS)
+    if provider:
+        p = provider.upper()
+        regions = [r for r in regions if r["provider"].upper() == p]
+    if country:
+        c = country.lower()
+        regions = [r for r in regions if c in r["name"].lower()]
+
+    by_provider: dict[str, int] = {}
+    for r in regions:
+        by_provider[r["provider"]] = by_provider.get(r["provider"], 0) + 1
+
+    return {
+        "regions": regions,
+        "count": len(regions),
+        "total_in_database": len(CLOUD_REGIONS),
+        "by_provider": by_provider,
+        "filters": {"provider": provider, "country": country},
+        "source": "static-geospatial",
+        "timestamp": _utc_now_iso(),
+    }
+
+
+async def fetch_financial_centers(
+    country: str | None = None,
+    min_rank: int | None = None,
+) -> dict:
+    """Query global financial centers (GFCI top 20+).
+
+    Args:
+        country: Filter by ISO-3 country code.
+        min_rank: Only include centers ranked this or better (lower = better).
+    """
+    centers = list(FINANCIAL_CENTERS)
+    if country:
+        c = country.upper()
+        centers = [fc for fc in centers if fc["iso3"] == c]
+    if min_rank is not None:
+        centers = [fc for fc in centers if fc["gfci_rank"] <= min_rank]
+
+    by_country: dict[str, int] = {}
+    for fc in centers:
+        by_country[fc["iso3"]] = by_country.get(fc["iso3"], 0) + 1
+
+    return {
+        "centers": centers,
+        "count": len(centers),
+        "total_in_database": len(FINANCIAL_CENTERS),
+        "by_country": by_country,
+        "filters": {"country": country, "min_rank": min_rank},
         "source": "static-geospatial",
         "timestamp": _utc_now_iso(),
     }

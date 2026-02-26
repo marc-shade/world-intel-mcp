@@ -56,6 +56,8 @@ from world_intel_mcp.sources.usni_fleet import fetch_usni_fleet
 from world_intel_mcp.config.countries import INTEL_HOTSPOTS, STRATEGIC_WATERWAYS
 from world_intel_mcp.config.geospatial import MILITARY_BASES, STRATEGIC_PORTS, PIPELINES, NUCLEAR_FACILITIES
 from world_intel_mcp.sources.infrastructure import CABLE_CORRIDORS
+from world_intel_mcp.config.trade_routes import TRADE_ROUTES, CLOUD_REGIONS, FINANCIAL_CENTERS
+from world_intel_mcp.sources.central_banks import fetch_central_bank_rates
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +129,8 @@ async def _fetch_overview() -> dict:
         "traffic_flow": traffic.fetch_traffic_flow(fetcher),
         "traffic_incidents": traffic.fetch_traffic_incidents(fetcher),
         "webcams": webcams.fetch_webcams(fetcher),
+        "btc_technicals": markets.fetch_btc_technicals(fetcher),
+        "central_bank_rates": fetch_central_bank_rates(fetcher),
     }
 
     # Per-coro timeout so no single slow source blocks the entire dashboard.
@@ -187,6 +191,9 @@ async def _fetch_overview() -> dict:
     result["pipelines"] = {"pipelines": PIPELINES, "count": len(PIPELINES)}
     result["nuclear_facilities"] = {"facilities": NUCLEAR_FACILITIES, "count": len(NUCLEAR_FACILITIES)}
     result["waterways"] = {"waterways": STRATEGIC_WATERWAYS, "count": len(STRATEGIC_WATERWAYS)}
+    result["trade_routes"] = {"routes": TRADE_ROUTES, "count": len(TRADE_ROUTES)}
+    result["cloud_regions"] = {"regions": CLOUD_REGIONS, "count": len(CLOUD_REGIONS)}
+    result["financial_centers"] = {"centers": FINANCIAL_CENTERS, "count": len(FINANCIAL_CENTERS)}
     result["cable_corridors"] = {
         "corridors": [
             {"name": n, "lat_range": c["lat_range"], "lon_range": c["lon_range"], "cables": c["cables"]}
@@ -275,6 +282,9 @@ async def api_static(request):
             ],
             "count": len(CABLE_CORRIDORS),
         },
+        "trade_routes": {"routes": TRADE_ROUTES, "count": len(TRADE_ROUTES)},
+        "cloud_regions": {"regions": CLOUD_REGIONS, "count": len(CLOUD_REGIONS)},
+        "financial_centers": {"centers": FINANCIAL_CENTERS, "count": len(FINANCIAL_CENTERS)},
     }, headers={"Access-Control-Allow-Origin": "*"})
 
 
