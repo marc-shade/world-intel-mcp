@@ -6,9 +6,9 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-green)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-Real-time global intelligence across **30+ domains** with **101 MCP tools**, a live ops-center dashboard, and a CLI. All data comes from free, public APIs — no paid subscriptions required.
+Real-time global intelligence across **30+ domains** with **106 MCP tools**, a live ops-center dashboard, a CLI, and a **Qdrant vector store** for enterprise-grade semantic search across accumulated intelligence. All data comes from free, public APIs — no paid subscriptions required.
 
-Built for AI agents that need world awareness: market conditions, geopolitical risk, military posture, supply chain disruptions, cyber threats, and more — all queryable via the Model Context Protocol.
+Built for AI agents that need world awareness: market conditions, geopolitical risk, military posture, supply chain disruptions, cyber threats, and more — all queryable via the Model Context Protocol. The vector store enables natural language queries like *"military activity near Taiwan"* or *"cyber threats targeting healthcare"* across all historical data.
 
 ---
 
@@ -53,7 +53,10 @@ Built for AI agents that need world awareness: market conditions, geopolitical r
 | **Strategic Synthesis** | 4 | Strategic posture, world brief, fleet report, population exposure |
 | **Cross-Domain** | 2 | Alert digest, weekly trends |
 
-**Total: 101 tools** across 30+ intelligence domains.
+| **Vector Search** | 5 | Qdrant semantic search, similarity, timeline, collection |
+| **Data Collection** | 1 | On-demand collector trigger |
+
+**Total: 106 tools** across 30+ intelligence domains.
 
 ---
 
@@ -68,6 +71,7 @@ pip install -e .
 
 # Optional extras
 pip install -e ".[dashboard]"  # Live ops-center dashboard
+pip install -e ".[vector]"     # Qdrant vector store + FastEmbed
 pip install -e ".[dev]"        # pytest, respx, coverage
 ```
 
@@ -113,15 +117,17 @@ intel status               # cache + circuit breaker health
 ## Architecture
 
 ```
-server.py (MCP stdio)  ─┐
-cli.py (Click CLI)      ├─> sources/*.py ─> Fetcher ─> CircuitBreaker ─> Cache (SQLite)
-dashboard/app.py (SSE)  ─┘    analysis/*.py                                  │
-                                                                   ~/.cache/world-intel-mcp/cache.db
+server.py (MCP stdio)  ─┐                                              ┌─ VectorStore (Qdrant)
+cli.py (Click CLI)      ├─> sources/*.py ─> Fetcher ─> CircuitBreaker ─┤
+dashboard/app.py (SSE)  ─┘    analysis/*.py                            └─ Cache (SQLite)
+collector.py (daemon)  ──┘
 ```
 
-- **Fetcher**: Centralized async HTTP client (httpx). Retries, per-source rate limiting, stale-data fallback.
+- **Fetcher**: Centralized async HTTP client (httpx). Retries, per-source rate limiting, stale-data fallback. Auto-stores results in vector store on fresh fetches.
 - **CircuitBreaker**: Per-source tracking. 3 consecutive failures trips for 5 minutes. Each RSS feed gets its own breaker.
 - **Cache**: SQLite WAL-mode TTL cache. `get()` returns live data, `get_stale()` returns expired data for fallback.
+- **VectorStore**: Qdrant + FastEmbed (BAAI/bge-small-en-v1.5, 384-dim). Async background worker queue for non-blocking storage. Enables semantic search across all accumulated intelligence.
+- **Collector**: Standalone daemon that fetches all 43 sources in parallel and populates the vector store. Run once or as a daemon (default: 5-minute interval).
 - **Sources** (`sources/*.py`): 30+ modules, each exports `async def fetch_*(fetcher, **kwargs) -> dict`.
 - **Analysis** (`analysis/*.py`): Cross-domain synthesis — signal aggregation, instability indexing, NLP, company enrichment, macro composite.
 - **Config** (`config/*.py`): Curated datasets — 22 hotspots, 70+ bases, 40 ports, 24 pipelines, 24 nuclear facilities, 34 cables, 48 datacenters, 27 spaceports, 82 exchanges.
@@ -317,6 +323,47 @@ dashboard/app.py (SSE)  ─┘    analysis/*.py                                 
 | `intel_traffic_incidents` | Real-time traffic incidents |
 | `intel_webcams` | Public webcam locations and live previews |
 | `intel_status` | Server health, cache stats, circuit breaker status |
+
+### Vector Search (5)
+| Tool | Description |
+|------|-------------|
+| `intel_semantic_search` | Natural language search across all accumulated intelligence |
+| `intel_similar_events` | Find events similar to a given data point |
+| `intel_timeline` | Chronological view of intelligence for a domain/category |
+| `intel_vector_stats` | Vector store collection statistics |
+| `intel_collect` | Trigger an on-demand collection cycle |
+
+---
+
+## Vector Store
+
+The optional Qdrant vector store accumulates intelligence over time for semantic retrieval. All data fetched through the Fetcher is automatically embedded and stored.
+
+### Setup
+
+```bash
+# Install Qdrant (Docker)
+docker run -p 6333:6333 qdrant/qdrant
+
+# Install vector dependencies
+pip install -e ".[vector]"
+
+# Run the collector daemon (populates vector store 24/7)
+intel-collector --daemon              # every 5 minutes
+intel-collector --daemon --interval 120  # every 2 minutes
+intel-collector --sources markets,cyber  # specific domains only
+intel-collector                        # single collection cycle
+```
+
+### Semantic Search Examples
+
+Once data accumulates, AI agents can query across all domains:
+
+- *"military activity near Taiwan strait"* — finds military flights, naval warnings, theater posture data
+- *"cyber threats targeting healthcare"* — finds URLhaus, CISA KEV entries related to healthcare
+- *"economic indicators suggesting recession"* — finds yield curve inversions, macro signals, FRED data
+
+The vector store uses FastEmbed (ONNX-based, BAAI/bge-small-en-v1.5) for embeddings — no GPU required, ~3 second cold start.
 
 ---
 

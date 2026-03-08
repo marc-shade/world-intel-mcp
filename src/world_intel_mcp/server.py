@@ -25,8 +25,9 @@ Phase 13: USNI fleet tracker, RSS expansion, report removal.
 Phase 14: BTC technicals, central bank rates, trade routes, cloud regions, financial centers (+5 = 87 tools).
 Phase 15: Business intelligence — forex (3), bonds/yields (2), earnings (2), SEC filings (3),
           company enrichment (1), macro composite (1) (+12 = 99 tools).
-Phase 16: Vector intelligence — semantic search, similar events, timeline (+3 = 102 tools).
-          Qdrant vector store auto-populates from all fetches. Enterprise-grade semantic retrieval.
+Phase 16: Vector intelligence — semantic search, similar events, timeline, vector stats,
+          on-demand collection (+5 = 104 tools). Qdrant vector store auto-populates from all fetches.
+          Collector daemon for 24/7 data accumulation. Enterprise-grade semantic retrieval.
 """
 
 import asyncio
@@ -1617,6 +1618,24 @@ TOOLS: list[Tool] = [
             },
         },
     ),
+    Tool(
+        name="intel_vector_stats",
+        description="Get vector store statistics: total points, collection status, embedding model info. Shows how much intelligence data has been accumulated.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="intel_collect",
+        description="Trigger an immediate collection cycle to populate the vector store. Fetches all intelligence sources and stores them. Optional: sources (comma-separated domain groups like 'markets,conflict,cyber').",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "sources": {
+                    "type": "string",
+                    "description": "Comma-separated domain groups (e.g., 'markets,conflict,cyber'). Default: all sources.",
+                },
+            },
+        },
+    ),
     # --- System (1 tool) ---
     Tool(
         name="intel_status",
@@ -2232,6 +2251,26 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
                 category=arguments.get("category"),
                 hours=arguments.get("hours", 24.0),
                 limit=arguments.get("limit", 50),
+            )
+
+        case "intel_vector_stats":
+            if _vector_store is None:
+                return {"error": "Vector store not available (Qdrant not running?)"}
+            return await _vector_store.collection_stats()
+
+        case "intel_collect":
+            if _vector_store is None:
+                return {"error": "Vector store not available (Qdrant not running?)"}
+            from .collector import collect_once
+
+            return await collect_once(
+                fetcher,
+                _vector_store,
+                source_filter=(
+                    None
+                    if not arguments.get("sources")
+                    else set(arguments["sources"].split(","))
+                ),
             )
 
         # System
