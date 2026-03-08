@@ -656,85 +656,85 @@ a { color: var(--accent); text-decoration: none; }
     <div class="layer-row" data-layer="quakes">
         <span class="layer-dot" style="background:var(--red)"></span>
         <span class="layer-label">Earthquakes</span>
-        <span class="layer-count" id="cntQuakes">0</span>
+        <span class="layer-count" id="cntQuakes">—</span>
         <div class="toggle on" style="--lc:var(--red)"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="military">
         <span class="layer-dot" style="background:var(--blue)"></span>
         <span class="layer-label">Military</span>
-        <span class="layer-count" id="cntMil">0</span>
+        <span class="layer-count" id="cntMil">—</span>
         <div class="toggle on" style="--lc:var(--blue)"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="conflict">
         <span class="layer-dot" style="background:var(--amber)"></span>
         <span class="layer-label">Conflict</span>
-        <span class="layer-count" id="cntConflict">0</span>
+        <span class="layer-count" id="cntConflict">—</span>
         <div class="toggle on" style="--lc:var(--amber)"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="fires">
         <span class="layer-dot" style="background:var(--gold)"></span>
         <span class="layer-label">Wildfires</span>
-        <span class="layer-count" id="cntFires">0</span>
+        <span class="layer-count" id="cntFires">—</span>
         <div class="toggle on" style="--lc:var(--gold)"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="convergence">
         <span class="layer-dot" style="background:var(--purple)"></span>
         <span class="layer-label">Convergence</span>
-        <span class="layer-count" id="cntConv">0</span>
+        <span class="layer-count" id="cntConv">—</span>
         <div class="toggle on" style="--lc:var(--purple)"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="nuclear">
         <span class="layer-dot" style="background:var(--green)"></span>
         <span class="layer-label">Nuclear Sites</span>
-        <span class="layer-count" id="cntNuclear">0</span>
+        <span class="layer-count" id="cntNuclear">—</span>
         <div class="toggle on" style="--lc:var(--green)"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="infra">
         <span class="layer-dot" style="background:var(--teal)"></span>
         <span class="layer-label">Infrastructure</span>
-        <span class="layer-count" id="cntInfra">0</span>
+        <span class="layer-count" id="cntInfra">—</span>
         <div class="toggle on" style="--lc:var(--teal)"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="exposure">
         <span class="layer-dot" style="background:#e040fb"></span>
         <span class="layer-label">Pop Exposure</span>
-        <span class="layer-count" id="cntExposure">0</span>
+        <span class="layer-count" id="cntExposure">—</span>
         <div class="toggle on" style="--lc:#e040fb"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="airtraffic">
         <span class="layer-dot" style="background:#00c8ff"></span>
         <span class="layer-label">Air Traffic</span>
-        <span class="layer-count" id="cntAirTraffic">0</span>
+        <span class="layer-count" id="cntAirTraffic">—</span>
         <div class="toggle on" style="--lc:#00c8ff"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="traffic">
         <span class="layer-dot" style="background:#e0e0e0"></span>
         <span class="layer-label">Road Traffic</span>
-        <span class="layer-count" id="cntTraffic">0</span>
+        <span class="layer-count" id="cntTraffic">—</span>
         <div class="toggle on" style="--lc:#ffa000"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="navwarnings">
         <span class="layer-dot" style="background:#ffc832"></span>
         <span class="layer-label">Nav Warnings</span>
-        <span class="layer-count" id="cntNavWarn">0</span>
+        <span class="layer-count" id="cntNavWarn">—</span>
         <div class="toggle on" style="--lc:#ffc832"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="webcams">
         <span class="layer-dot" style="background:#909090"></span>
         <span class="layer-label">Webcams</span>
-        <span class="layer-count" id="cntCams">0</span>
+        <span class="layer-count" id="cntCams">—</span>
         <div class="toggle on" style="--lc:#78dcff"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="climate">
         <span class="layer-dot" style="background:#ff6b6b"></span>
         <span class="layer-label">Climate</span>
-        <span class="layer-count" id="cntClimate">0</span>
+        <span class="layer-count" id="cntClimate">—</span>
         <div class="toggle on" style="--lc:#ff6b6b"><div class="knob"></div></div>
     </div>
     <div class="layer-row" data-layer="news">
         <span class="layer-dot" style="background:var(--accent)"></span>
         <span class="layer-label">News</span>
-        <span class="layer-count" id="cntNews">0</span>
+        <span class="layer-count" id="cntNews">—</span>
         <div class="toggle on" style="--lc:var(--accent)"><div class="knob"></div></div>
     </div>
     <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:4px;padding-top:6px">
@@ -822,6 +822,67 @@ var layerState = { quakes: true, military: true, conflict: true, fires: true, co
 // Restore saved layer toggles from localStorage
 try { var _saved = JSON.parse(localStorage.getItem('phoenix-layers')); if (_saved) { for (var _k in _saved) { if (layerState.hasOwnProperty(_k)) layerState[_k] = _saved[_k]; } } } catch(e) {}
 var drawerOpen = false;
+var latestStaticData = null;
+var latestVectorData = null;
+var DASHBOARD_CACHE_KEY = 'phoenix-dashboard-cache-v1';
+var STATIC_CACHE_KEY = 'phoenix-static-cache-v1';
+var VECTOR_CACHE_KEY = 'phoenix-vector-cache-v1';
+var INFRA_SNAPSHOT_KEYS = ['military_bases', 'strategic_ports', 'pipelines', 'nuclear_facilities', 'trade_routes', 'waterways', 'cable_corridors'];
+function _readCacheEnvelope(key) {
+    try {
+        var raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+    } catch(e) { return null; }
+}
+function _writeCacheEnvelope(key, payload) {
+    try { localStorage.setItem(key, JSON.stringify({ saved_at: new Date().toISOString(), payload: payload })); } catch(e) {}
+}
+function _extractCachePayload(entry) {
+    if (!entry) return null;
+    return entry.payload || entry;
+}
+function _mergeStaticData(data) {
+    if (!data || !latestStaticData) return data;
+    var merged = Object.assign({}, data);
+    INFRA_SNAPSHOT_KEYS.forEach(function(key) {
+        if (merged[key] == null && latestStaticData[key] != null) merged[key] = latestStaticData[key];
+    });
+    return merged;
+}
+function _hideLoading() {
+    var loading = document.getElementById('loading');
+    if (loading) loading.classList.add('gone');
+}
+function _restoreCachedDashboard() {
+    var cachedStatic = _extractCachePayload(_readCacheEnvelope(STATIC_CACHE_KEY));
+    if (cachedStatic) latestStaticData = cachedStatic;
+    var cachedData = _extractCachePayload(_readCacheEnvelope(DASHBOARD_CACHE_KEY));
+    if (!cachedData) {
+        if (latestStaticData) {
+            try { updateMapInfra(latestStaticData); } catch(e) { console.warn('cached static restore failed:', e); }
+        }
+        return false;
+    }
+    try {
+        updateAll(cachedData);
+        _hideLoading();
+        return true;
+    } catch(e) {
+        console.warn('dashboard cache restore failed:', e);
+        return false;
+    }
+}
+function _restoreCachedVector() {
+    var cachedVector = _extractCachePayload(_readCacheEnvelope(VECTOR_CACHE_KEY));
+    if (!cachedVector) return false;
+    try {
+        updateVectorPanel(cachedVector);
+        return true;
+    } catch(e) {
+        console.warn('vector cache restore failed:', e);
+        return false;
+    }
+}
 
 // ════════════ MAP INIT ════════════
 function initMap() {
@@ -1055,11 +1116,11 @@ function showDetail(type, d) {
             ['Source', d.feed_name || '\u2014'],
             ['Category', d.category || '\u2014'],
             ['Published', d.published ? new Date(d.published).toLocaleString() : '\u2014'],
-            ['Summary', trunc(d.summary || '', 200)],
+            ['Summary', trunc(d.summary || d.description || '', 200)],
             ['Tier', d.source_tier || '\u2014'],
             ['Region', d._geo_country || '\u2014']
         ];
-        link = d.link || '';
+        link = d.link || d.url || '';
     } else if (type === 'navwarn') {
         title = 'NAVAREA ' + (d.navarea || '?') + ' \u2014 ' + (d.id || '');
         subtitle = d.status || '';
@@ -1245,7 +1306,7 @@ function showDrawerDetail(id) {
         ];
     } else if (type === 'navwarning') {
         title = (d.navArea || d.area || 'Nav Warning');
-        subtitle = '';
+        subtitle = d.status || '';
         fields = [
             ['Area', d.navArea || d.area || '\u2014'],
             ['Number', d.number || d.id || '\u2014'],
@@ -1447,7 +1508,8 @@ function _toggleLayerByIndex(idx) {
     var toggle = row.querySelector('.toggle');
     toggle.classList.toggle('on');
     layerState[key] = toggle.classList.contains('on');
-    if (layerState[key]) { mapLayers[key].addTo(map); } else { map.removeLayer(mapLayers[key]); }
+    if (layerState[key]) { mapLayers[key].addTo(map); }
+    else { map.removeLayer(mapLayers[key]); }
     try { localStorage.setItem('phoenix-layers', JSON.stringify(layerState)); } catch(e) {}
 }
 
@@ -1457,7 +1519,8 @@ function _toggleAllLayers() {
     _layerKeys.forEach(function(key) {
         if (!mapLayers[key]) return;
         layerState[key] = _allLayersOn;
-        if (_allLayersOn) { mapLayers[key].addTo(map); } else { map.removeLayer(mapLayers[key]); }
+        if (_allLayersOn) { mapLayers[key].addTo(map); }
+        else { map.removeLayer(mapLayers[key]); }
         var row = document.querySelector('.layer-row[data-layer="' + key + '"]');
         if (row) { var t = row.querySelector('.toggle'); if (t) { if (_allLayersOn) t.classList.add('on'); else t.classList.remove('on'); } }
     });
@@ -1738,9 +1801,7 @@ function updateMapInfra(data) {
         var mk = L.marker([tr.lat, tr.lon], {
             icon: L.divIcon({ className: iconCls, iconSize: [8, 8], iconAnchor: [4, 4] })
         });
-        mk.bindTooltip('<b>' + esc(tr.name) + '</b><br>' +
-            '<span style="opacity:0.7">' + esc(tr.type) + ' · ' + (tr.oil_flow_mbd || 0) + ' mbd oil · ~' + (tr.daily_vessel_transits || 0) + ' vessels/day</span>',
-            { className: 'mk-tip', direction: 'top', offset: [0, -5] });
+        mk.bindTooltip('<b>' + esc(tr.name) + '</b> <span style="opacity:0.7">' + esc(tr.type) + ' · ' + (tr.oil_flow_mbd || 0) + ' mbd oil · ~' + (tr.daily_vessel_transits || 0) + ' vessels/day</span>', { className: 'mk-tip', direction: 'top', offset: [0, -5] });
         mk.on('click', function() {
             showDetail('trade_route', {
                 name: tr.name, type: tr.type, oil_flow_mbd: tr.oil_flow_mbd,
@@ -1771,11 +1832,10 @@ function updateMapExposure(data) {
     mapLayers.exposure.clearLayers();
     if (!data || data.error) { $('#cntExposure').textContent = '0'; return; }
     var cities = data.exposed_cities || [];
-    var evtColors = { conflict: '#ff1744', earthquake: '#ff9100', wildfire: '#ffea00' };
     $('#cntExposure').textContent = cities.length;
     cities.forEach(function(c) {
         if (c.lat == null || c.lon == null) return;
-        var color = evtColors[c.nearest_event] || '#e040fb';
+        var color = COLORS[c.nearest_event] || '#e040fb';
         var pop = c.population || 0;
         var radius = Math.max(5, Math.min(22, Math.sqrt(pop / 400000)));
         var circle = L.circleMarker([c.lat, c.lon], {
@@ -2107,7 +2167,7 @@ function updateDrawer(data) {
         h += '<div class="mini-row">';
         if (byPri.critical) h += '<div class="mini-box"><div class="v" style="color:var(--red)">' + byPri.critical + '</div><div class="l">Critical</div></div>';
         if (byPri.high) h += '<div class="mini-box"><div class="v" style="color:var(--amber)">' + byPri.high + '</div><div class="l">High</div></div>';
-        if (byPri.medium) h += '<div class="mini-box"><div class="v" style="color:var(--blue)">' + byPri.medium + '</div><div class="l">Medium</div></div>';
+        if (byPri.medium) h += '<div class="mini-box"><div class="v">' + byPri.medium + '</div><div class="l">Medium</div></div>';
         h += '</div>';
         var alertItems = data.alert_digest.alerts || [];
         alertItems.forEach(function(a) {
@@ -2222,10 +2282,9 @@ function updateDrawer(data) {
         h += '</div>';
         h += '<table class="dtable"><thead><tr><th>IOC</th><th>Type</th><th>Sev</th></tr></thead><tbody>';
         threats.slice(0, 15).forEach(function(t) {
-            var sev = (t.severity || '').toLowerCase();
-            var sc = sev === 'critical' ? 'down' : sev === 'high' ? 'warn' : 'dim';
+            var sevCls = t.severity === 'critical' ? 'down' : t.severity === 'high' ? 'warn' : 'dim';
             var did = _storeItem('cyber', t);
-            h += '<tr data-click="' + did + '"><td>' + esc(trunc(t.indicator || t.url || t.ioc || '?', 30)) + '</td><td class="dim">' + esc(t.threat_type || t.type || '\u2014') + '</td><td class="' + sc + '">' + esc(t.severity || '\u2014') + '</td></tr>';
+            h += '<tr data-click="' + did + '"><td>' + esc(trunc(t.indicator || t.url || t.ioc || '?', 30)) + '</td><td class="dim">' + esc(t.threat_type || t.type || '\u2014') + '</td><td class="' + sevCls + '">' + esc(t.severity || '\u2014') + '</td></tr>';
         });
         h += '</tbody></table>';
     }
@@ -2280,7 +2339,7 @@ function updateDrawer(data) {
             h += '<div class="sub">Risk Scores</div><table class="dtable"><thead><tr><th>Country</th><th>Score</th><th>Level</th></tr></thead><tbody>';
             countries.slice(0, 10).forEach(function(c) {
                 var rl = (c.risk_level || '').toLowerCase();
-                var rc = rl === 'extreme' || rl === 'critical' ? 'down' : rl === 'high' ? 'warn' : rl === 'elevated' ? 'warn' : 'dim';
+                var rc = rl === 'extreme' || rl === 'critical' ? 'down' : rl === 'high' ? 'high' : rl === 'elevated' ? 'high' : 'dim';
                 h += '<tr><td class="bright">' + esc(c.country || '?') + '</td><td>' + fmtNum(c.risk_score, 1) + '</td><td class="' + rc + '">' + esc(c.risk_level || '\u2014') + '</td></tr>';
             });
             h += '</tbody></table>';
@@ -2364,44 +2423,30 @@ function updateDrawer(data) {
         h += '<div class="mini-box"><div class="v">' + fmtBigPlain(totals.total_idps || 0) + '</div><div class="l">IDPs</div></div>';
         h += '<div class="mini-box"><div class="v warn">' + fmtBigPlain(totals.grand_total || 0) + '</div><div class="l">Total</div></div>';
         h += '</div>';
-        var origins = data.displacement.by_origin || [];
-        if (origins.length) {
-            h += '<table class="dtable"><thead><tr><th>Origin</th><th>Refugees</th><th>IDPs</th></tr></thead><tbody>';
-            origins.slice(0, 8).forEach(function(o) {
-                h += '<tr><td class="bright">' + esc(o.country_name || o.country || '?') + '</td><td>' + fmtBigPlain(o.refugees || 0) + '</td><td>' + fmtBigPlain(o.internally_displaced || o.idps || 0) + '</td></tr>';
-            });
-            h += '</tbody></table>';
+        var byType = data.displacement.by_event_type || {};
+        if (Object.keys(byType).length) {
+            h += '<div class="mini-row">';
+            for (var etk in byType) {
+                if (byType.hasOwnProperty(etk)) {
+                    var etColor = etk === 'conflict' ? 'var(--red)' : etk === 'earthquake' ? 'var(--amber)' : '#ffea00';
+                    h += '<div class="mini-box"><div class="v" style="color:' + etColor + '">' + esc(byType[etk]) + '</div><div class="l">' + esc(etk) + '</div></div>';
+                }
+            }
+            h += '</div>';
         }
-    }
-    if (data.signal_convergence && !data.signal_convergence.error) {
-        var hs = data.signal_convergence.hotspots || [];
-        if (hs.length) {
-            h += '<div class="sub">Signal Convergence</div><table class="dtable"><thead><tr><th>Region</th><th>Score</th><th>Signals</th></tr></thead><tbody>';
-            hs.slice(0, 10).forEach(function(hp) {
-                var score = hp.convergence_score || 0;
-                var sigs = hp.signals || {};
-                var sigStr = Object.entries(sigs).map(function(e) { return e[0] + ':' + e[1]; }).join(', ');
-                h += '<tr><td class="bright">' + esc(hp.name || '?') + '</td><td class="' + (score >= 7 ? 'down' : score >= 4 ? 'warn' : 'dim') + '">' + fmtNum(score, 1) + '</td><td class="dim">' + esc(trunc(sigStr, 25)) + '</td></tr>';
-            });
-            h += '</tbody></table>';
-        }
-    }
-    if (data.climate_anomalies && !data.climate_anomalies.error) {
-        var src = data.climate_anomalies.anomalies || data.climate_anomalies.zones || data.climate_anomalies.data || [];
-        var anomalies = Array.isArray(src) ? src : (typeof src === 'object' ? Object.values(src) : []);
-        if (anomalies.length) {
-            h += '<div class="sub">Climate Anomalies</div><table class="dtable"><thead><tr><th>Zone</th><th>Temp</th><th>Precip</th></tr></thead><tbody>';
-            anomalies.slice(0, 8).forEach(function(a) {
-                var temp = a.temp_anomaly_c != null ? a.temp_anomaly_c : (a.temperature_anomaly || a.temp_anomaly || a.temp_deviation);
-                var precip = a.precip_anomaly_pct != null ? a.precip_anomaly_pct : (a.precipitation_anomaly || a.precip_anomaly || a.precip_deviation);
-                h += '<tr><td>' + esc(a.zone || a.name || a.region || '?') + '</td><td class="' + (temp > 0 ? 'warn' : 'up') + '">' + (temp != null ? (temp > 0 ? '+' : '') + fmtNum(temp, 1) + '\u00B0C' : '\u2014') + '</td><td class="' + (precip > 50 ? 'warn' : precip < -50 ? 'down' : 'dim') + '">' + (precip != null ? (precip > 0 ? '+' : '') + fmtNum(precip, 0) + '%' : '\u2014') + '</td></tr>';
+        var exCities = data.exposed_cities || [];
+        if (exCities.length) {
+            h += '<table class="dtable"><thead><tr><th>City</th><th>Pop</th><th>Threat</th><th>Dist</th></tr></thead><tbody>';
+            exCities.slice(0, 15).forEach(function(c) {
+                var popStr = (c.population || 0) >= 1000000 ? ((c.population / 1000000).toFixed(1) + 'M') : ((c.population / 1000).toFixed(0) + 'K');
+                var tColor = c.nearest_event === 'conflict' ? 'down' : c.nearest_event === 'earthquake' ? 'warn' : 'warn';
+                h += '<tr><td class="bright">' + esc(c.city || '?') + '</td><td class="dim">' + popStr + '</td><td class="' + tColor + '">' + esc(c.nearest_event || '\u2014') + '</td><td class="dim">' + (c.distance_km || 0) + 'km</td></tr>';
             });
             h += '</tbody></table>';
         }
     }
 
     // ── AGI WATCH ──
-    h += '<div class="sh">AGI WATCH</div>';
     if (data.ai_watch && !data.ai_watch.error) {
         var aiw = data.ai_watch;
         var labTrend = aiw.lab_trending || [];
@@ -2699,7 +2744,7 @@ function updateDrawer(data) {
         h += '<div class="mini-row">';
         var avgCls = tf.global_avg_congestion >= 40 ? ' crit' : tf.global_avg_congestion >= 20 ? ' warn' : '';
         h += '<div class="mini-box"><div class="v' + avgCls + '">' + fmtNum(tf.global_avg_congestion, 0) + '%</div><div class="l">Avg Congestion</div></div>';
-        h += '<div class="mini-box"><div class="v">' + tf.count + '</div><div class="l">Cities</div></div>';
+        h += '<div class="mini-box"><div class="v">' + (tf.count || 0) + '</div><div class="l">Cities</div></div>';
         h += '</div>';
         h += '<table class="dtable"><thead><tr><th>City</th><th>Cong%</th><th>Speed</th></tr></thead><tbody>';
         (tf.cities || []).forEach(function(c) {
@@ -2746,7 +2791,7 @@ function updateDrawer(data) {
         }
         (uf.ships || []).slice(0, 15).forEach(function(s) {
             var cls = s.type === 'Aircraft Carrier' ? 'crit' : 'bright';
-            h += '<div style="font-size:0.65rem;padding:1px 0"><span class="' + cls + '">' + esc(s.name) + '</span> <span class="dim">(' + esc(s.hull_number) + ') ' + esc(s.region) + '</span></div>';
+            h += '<div style="font-size:0.65rem;padding:1px 0"><span class="' + cls + '">' + esc(s.name) + '</span> <span class="dim">' + (s.hull_number || '') + ' ' + esc(s.region) + '</span></div>';
         });
     }
 
@@ -2821,10 +2866,10 @@ function updateDrawer(data) {
     try {
         var _collapsed = JSON.parse(localStorage.getItem('phoenix-drawer-collapsed')) || [];
         if (_collapsed.length) {
-            $$('#drawerBody .sh').forEach(function(sh) {
-                if (_collapsed.indexOf(sh.textContent.trim()) >= 0) {
-                    sh.classList.add('collapsed');
-                    var next = sh.nextElementSibling;
+            $$('#drawerBody .sh').forEach(function(s) {
+                if (_collapsed.indexOf(s.textContent.trim()) >= 0) {
+                    s.classList.add('collapsed');
+                    var next = s.nextElementSibling;
                     while (next && !next.classList.contains('sh')) { next.style.display = 'none'; next = next.nextElementSibling; }
                 }
             });
@@ -2855,8 +2900,11 @@ function updateTicker(data) {
 function refreshDashboard(data) { updateAll(data); }
 
 function updateAll(data) {
+    if (!data) return;
+    data = _mergeStaticData(data);
     latestData = data;
     window._lastSSEData = data;
+    _writeCacheEnvelope(DASHBOARD_CACHE_KEY, data);
 
     // Map layers (each wrapped to prevent cascade failures)
     var conflictData = (data.acled_events && !data.acled_events.error && data.acled_events.count > 0) ? data.acled_events
@@ -2982,7 +3030,7 @@ $('#hudStats').addEventListener('click', function(e) {
     }
     try {
         var bounds = mapLayers[layerKey].getBounds();
-        if (bounds && bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 6 });
+        if (bounds && bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50], maxZoom: bounds.getNorthEast().lat === bounds.getSouthWest().lat ? 10 : 6 });
     } catch(e2) {}
 });
 
@@ -3061,103 +3109,17 @@ function performSearch(q) {
     setTimeout(function() { $('#searchInput').style.borderColor = ''; }, 2000);
 }
 
-// Mobile: collapsible layer panel
-$('#layers .panel-title').addEventListener('click', function() {
-    $('#layers').classList.toggle('layers-open');
-});
-
-// Auto-position layer panel + alert banner below topbar
-function _syncLayersTop() {
-    var tb = $('#topBar');
-    if (tb) {
-        var h = tb.offsetHeight;
-        var bannerTop = h + 16;
-        document.documentElement.style.setProperty('--layers-top', bannerTop + 'px');
-        // Push layers below the alert banner if it's showing
-        var banner = $('#alertBanner');
-        var bannerH = (banner && banner.classList.contains('show')) ? banner.offsetHeight + 4 : 0;
-        $('#layers').style.top = (bannerTop + bannerH) + 'px';
-    }
-}
-_syncLayersTop();
-window.addEventListener('resize', _syncLayersTop);
-
-// Show loading indicator until SSE data arrives
-$('#hudStats').innerHTML = '<div class="stat-pill"><span class="l" style="animation:pulse-dot 2s ease-in-out infinite">LOADING LIVE FEEDS</span></div>';
-$('#drawerBody').innerHTML = '<div style="padding:30px;text-align:center"><div class="load-ring" style="width:28px;height:28px;margin:0 auto 10px"></div><div class="dim" style="font-size:0.6rem;letter-spacing:1.5px">LOADING INTELLIGENCE FEEDS</div></div>';
-
-// ═══════════ REGIONAL PRESETS ═══════════
-var REGION_VIEWS = {
-    global: { center: [20, 0], zoom: 3 },
-    americas: { center: [10, -80], zoom: 4 },
-    europe: { center: [50, 15], zoom: 5 },
-    mena: { center: [28, 40], zoom: 5 },
-    asia: { center: [20, 110], zoom: 4 },
-    africa: { center: [0, 25], zoom: 4 },
-};
-$$('#regionPresets .rgn-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        var region = btn.dataset.region;
-        var view = REGION_VIEWS[region];
-        if (!view) return;
-        $$('#regionPresets .rgn-btn').forEach(function(b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        map.flyTo(view.center, view.zoom, { duration: 1.2 });
-        try { localStorage.setItem('phoenix-region', region); } catch(e) {}
-    });
-});
-// Restore saved region
-try {
-    var savedRegion = localStorage.getItem('phoenix-region');
-    if (savedRegion && REGION_VIEWS[savedRegion]) {
-        $$('#regionPresets .rgn-btn').forEach(function(b) {
-            b.classList.toggle('active', b.dataset.region === savedRegion);
-        });
-        var sv = REGION_VIEWS[savedRegion];
-        map.setView(sv.center, sv.zoom);
-    }
-} catch(e) {}
-
-// ═══════════ TIME WINDOW FILTER ═══════════
-var _timeFilterHours = 24;
-$$('#timeFilter .rgn-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        _timeFilterHours = parseInt(btn.dataset.hours) || 0;
-        $$('#timeFilter .rgn-btn').forEach(function(b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        try { localStorage.setItem('phoenix-time-filter', String(_timeFilterHours)); } catch(e) {}
-        // Re-render with current data if available
-        if (window._lastSSEData) refreshDashboard(window._lastSSEData);
-    });
-});
-// Restore saved time filter
-try {
-    var savedTime = localStorage.getItem('phoenix-time-filter');
-    if (savedTime !== null) {
-        _timeFilterHours = parseInt(savedTime) || 0;
-        $$('#timeFilter .rgn-btn').forEach(function(b) {
-            b.classList.toggle('active', b.dataset.hours === savedTime);
-        });
-    }
-} catch(e) {}
-
-// Time filter helper: check if an ISO timestamp is within the active window
-function _withinTimeWindow(isoTimestamp) {
-    if (_timeFilterHours === 0) return true; // "All" = no filter
-    if (!isoTimestamp) return true; // No timestamp = show
-    try {
-        var ts = new Date(isoTimestamp).getTime();
-        var cutoff = Date.now() - (_timeFilterHours * 3600000);
-        return ts >= cutoff;
-    } catch(e) { return true; }
-}
-
 // Load static geospatial data immediately (bases, ports, nuclear facilities).
 fetch('/api/static')
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        try { updateMapInfra(data); } catch(e) { console.warn('static infra failed:', e); }
-        document.getElementById('loading').classList.add('gone');
+        latestStaticData = data;
+        _writeCacheEnvelope(STATIC_CACHE_KEY, data);
+        if (window._lastSSEData) {
+            refreshDashboard(window._lastSSEData);
+        } else {
+            try { updateMapInfra(data); } catch(e) { console.warn('static infra failed:', e); }
+        }
     })
     .catch(function(e) { console.warn('static fetch failed:', e); });
 
@@ -3171,6 +3133,8 @@ function updateVectorPanel(vd) {
         panel.classList.add('hidden');
         return;
     }
+    latestVectorData = vd;
+    _writeCacheEnvelope(VECTOR_CACHE_KEY, vd);
     panel.classList.remove('hidden');
 
     // Points count in header
