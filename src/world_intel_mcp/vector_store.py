@@ -13,7 +13,9 @@ import hashlib
 import json
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from importlib.util import find_spec
 from typing import Any
 
 logger = logging.getLogger("world-intel-mcp.vector-store")
@@ -112,12 +114,62 @@ DOMAIN_CATEGORIES = {
     "reddit": "Social Signals",
 }
 
+try:
+    from qdrant_client.models import (
+        Distance,
+        FieldCondition,
+        Filter,
+        MatchValue,
+        PayloadSchemaType,
+        PointStruct,
+        Range,
+        VectorParams,
+    )
+except ImportError:
+    Distance = None
+    PayloadSchemaType = None
+    VectorParams = None
+
+    @dataclass(slots=True)
+    class MatchValue:
+        value: Any
+
+    @dataclass(slots=True)
+    class Range:
+        gte: float | None = None
+        lte: float | None = None
+
+    @dataclass(slots=True)
+    class FieldCondition:
+        key: str
+        match: Any = None
+        range: Any = None
+
+    @dataclass(slots=True)
+    class Filter:
+        must: list[Any]
+
+    @dataclass(slots=True)
+    class PointStruct:
+        id: int
+        vector: list[float]
+        payload: dict[str, Any]
+
+
+def vector_dependencies_available() -> bool:
+    return find_spec("fastembed") is not None and find_spec("qdrant_client") is not None
+
 
 def _get_embed_model():
     """Lazy-load the FastEmbed model (ONNX, ~45MB, no torch required)."""
     global _embed_model
     if _embed_model is None:
-        from fastembed import TextEmbedding
+        try:
+            from fastembed import TextEmbedding
+        except ImportError as exc:
+            raise RuntimeError(
+                'Vector store dependencies not installed. Install with `pip install -e ".[vector]"`.'
+            ) from exc
 
         _embed_model = TextEmbedding(EMBEDDING_MODEL)
         logger.info("Loaded embedding model: %s", EMBEDDING_MODEL)
@@ -128,8 +180,13 @@ def _get_qdrant():
     """Lazy-load the Qdrant client and ensure collection exists."""
     global _qdrant_client
     if _qdrant_client is None:
+        if not vector_dependencies_available() or any(
+            dep is None for dep in (Distance, VectorParams, PayloadSchemaType)
+        ):
+            raise RuntimeError(
+                'Vector store dependencies not installed. Install with `pip install -e ".[vector]"`.'
+            )
         from qdrant_client import QdrantClient
-        from qdrant_client.models import Distance, VectorParams
 
         _qdrant_client = QdrantClient(url=QDRANT_URL, timeout=10)
 
@@ -144,8 +201,6 @@ def _get_qdrant():
                 ),
             )
             # Create payload indexes for efficient filtering
-            from qdrant_client.models import PayloadSchemaType
-
             _qdrant_client.create_payload_index(
                 collection_name=COLLECTION_NAME,
                 field_name="domain",
@@ -317,8 +372,6 @@ class VectorStore:
 
     def _store_sync(self, domain: str, data: Any, timestamp: float) -> None:
         """Synchronous store operation (runs in thread pool)."""
-        from qdrant_client.models import PointStruct
-
         client = _get_qdrant()
         text = _data_to_text(domain, data)
         if len(text) < 20:
@@ -441,9 +494,19 @@ class VectorStore:
         Returns:
             Dict with results list, each containing score, domain, text, datetime.
         """
-        return await asyncio.to_thread(
-            self._search_sync, query, limit, domain, category, hours
-        )
+        filters = {"domain": domain, "category": category, "hours": hours}
+        try:
+            return await asyncio.to_thread(
+                self._search_sync, query, limit, domain, category, hours
+            )
+        except Exception as exc:
+            return {
+                "error": str(exc),
+                "query": query,
+                "results": [],
+                "count": 0,
+                "filters": filters,
+            }
 
     def _search_sync(
         self,
@@ -453,8 +516,6 @@ class VectorStore:
         category: str | None,
         hours: float | None,
     ) -> dict:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
-
         client = _get_qdrant()
         vector = _embed_text(query)
 
@@ -516,7 +577,16 @@ class VectorStore:
         hours: float | None = None,
     ) -> dict:
         """Find historically similar events/data to a given text."""
-        return await asyncio.to_thread(self._similar_sync, domain, text, limit, hours)
+        try:
+            return await asyncio.to_thread(self._similar_sync, domain, text, limit, hours)
+        except Exception as exc:
+            return {
+                "error": str(exc),
+                "reference_domain": domain,
+                "reference_text": text[:200],
+                "similar": [],
+                "count": 0,
+            }
 
     def _similar_sync(
         self,
@@ -525,8 +595,6 @@ class VectorStore:
         limit: int,
         hours: float | None,
     ) -> dict:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
-
         client = _get_qdrant()
         vector = _embed_text(text)
 
@@ -570,9 +638,19 @@ class VectorStore:
         limit: int = 50,
     ) -> dict:
         """Get chronological timeline of stored intelligence."""
-        return await asyncio.to_thread(
-            self._timeline_sync, domain, category, hours, limit
-        )
+        filters = {"domain": domain, "category": category}
+        try:
+            return await asyncio.to_thread(
+                self._timeline_sync, domain, category, hours, limit
+            )
+        except Exception as exc:
+            return {
+                "error": str(exc),
+                "hours": hours,
+                "entries": [],
+                "count": 0,
+                "filters": filters,
+            }
 
     def _timeline_sync(
         self,
@@ -581,8 +659,6 @@ class VectorStore:
         hours: float,
         limit: int,
     ) -> dict:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
-
         client = _get_qdrant()
         cutoff = time.time() - (hours * 3600)
 
@@ -668,9 +744,19 @@ class VectorStore:
         Given a topic, searches all domains and groups results by category,
         showing how different intelligence streams relate to the same event.
         """
-        return await asyncio.to_thread(
-            self._correlate_sync, query, hours, limit_per_domain
-        )
+        try:
+            return await asyncio.to_thread(
+                self._correlate_sync, query, hours, limit_per_domain
+            )
+        except Exception as exc:
+            return {
+                "error": str(exc),
+                "query": query,
+                "hours": hours,
+                "domains_found": 0,
+                "correlations": [],
+                "total_signals": 0,
+            }
 
     def _correlate_sync(
         self,
@@ -678,8 +764,6 @@ class VectorStore:
         hours: float,
         limit_per_domain: int,
     ) -> dict:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
-
         client = _get_qdrant()
         vector = _embed_text(query)
 
@@ -745,11 +829,18 @@ class VectorStore:
 
     async def domain_summary(self, hours: float = 24.0) -> dict:
         """Get per-domain summary of stored intelligence."""
-        return await asyncio.to_thread(self._domain_summary_sync, hours)
+        try:
+            return await asyncio.to_thread(self._domain_summary_sync, hours)
+        except Exception as exc:
+            return {
+                "error": str(exc),
+                "hours": hours,
+                "total_data_points": 0,
+                "categories": 0,
+                "summary": [],
+            }
 
     def _domain_summary_sync(self, hours: float) -> dict:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
-
         client = _get_qdrant()
         cutoff = time.time() - (hours * 3600)
 
@@ -843,9 +934,20 @@ class VectorStore:
         Compares data point density in the recent window against the baseline
         to identify surges or drops in intelligence activity.
         """
-        return await asyncio.to_thread(
-            self._trend_sync, category, recent_hours, baseline_hours
-        )
+        try:
+            return await asyncio.to_thread(
+                self._trend_sync, category, recent_hours, baseline_hours
+            )
+        except Exception as exc:
+            return {
+                "error": str(exc),
+                "recent_window_hours": recent_hours,
+                "baseline_window_hours": baseline_hours,
+                "categories_analyzed": 0,
+                "surges": 0,
+                "drops": 0,
+                "trends": [],
+            }
 
     def _trend_sync(
         self,
@@ -853,8 +955,6 @@ class VectorStore:
         recent_hours: float,
         baseline_hours: float,
     ) -> dict:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
-
         client = _get_qdrant()
         now = time.time()
         recent_cutoff = now - (recent_hours * 3600)

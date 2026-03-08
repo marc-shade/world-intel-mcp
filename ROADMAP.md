@@ -1,8 +1,8 @@
 # World Intel MCP — Feature Parity Roadmap
 
 **Benchmark**: [koala73/worldmonitor](https://github.com/koala73/worldmonitor)
-**Updated**: 2026-02-26
-**Current tools**: 89 (88 intel + 1 status)
+**Updated**: 2026-03-08
+**Current tools**: 109 (108 intel + 1 status)
 
 ---
 
@@ -13,6 +13,51 @@
 | :white_check_mark: | We have this |
 | :yellow_circle: | Partial — we have the data source but lack the analysis layer |
 | :red_circle: | Missing entirely |
+
+---
+
+## 0. Current Assessment / Gap Report
+
+| Area | Finding | Status | Action |
+|------|---------|--------|--------|
+| MCP tool parity | 109 tools declared in `TOOLS`; 109 routed in `_dispatch()` | :white_check_mark: | Keep as an invariant |
+| Optional vector runtime | Missing `qdrant-client` / `fastembed` previously surfaced as runtime failures | :white_check_mark: Fixed | Vector features now degrade cleanly and report availability |
+| Base-environment test run | `pytest -q` fails collection without dev extras because `respx` is not installed | :yellow_circle: | Run `pip install -e ".[dev]"` before full-suite validation |
+| Core verification | 77 infrastructure/vector tests pass in the base environment | :white_check_mark: | `test_cache.py`, `test_analysis.py`, `test_vector_store.py` |
+| Documentation drift | Prior roadmap documented 89 tools while the codebase exposed 109 | :white_check_mark: Updated below | Keep roadmap synced with phase increments |
+| Maintainability | `src/world_intel_mcp/server.py` is ~2.5k lines and remains the main refactor target | :yellow_circle: | Split tool registry and dispatch by domain |
+
+### Implemented Addendum Missing From Prior Roadmap
+
+#### Financial Intelligence Extensions (12 tools)
+
+| Tool | Purpose | Status |
+|------|---------|--------|
+| `intel_forex_rates` | Latest FX rates by base + symbol filters | :white_check_mark: |
+| `intel_forex_timeseries` | Historical FX series with configurable lookback | :white_check_mark: |
+| `intel_major_crosses` | Major crosses + DXY proxy snapshot | :white_check_mark: |
+| `intel_yield_curve` | Treasury curve + inversion analysis | :white_check_mark: |
+| `intel_bond_indices` | Bond ETF summary (AGG, TLT, HYG, LQD, TIP) | :white_check_mark: |
+| `intel_earnings_calendar` | Upcoming earnings calendar | :white_check_mark: |
+| `intel_earnings_surprise` | Historical earnings surprise analysis | :white_check_mark: |
+| `intel_sec_filings` | Full-text SEC EDGAR filing search | :white_check_mark: |
+| `intel_company_filings` | Company-specific 10-K / 10-Q / 8-K retrieval | :white_check_mark: |
+| `intel_recent_8k` | Recent material-event 8-K stream | :white_check_mark: |
+| `intel_company_profile` | Composite company enrichment profile | :white_check_mark: |
+| `intel_macro_composite` | Weighted market regime / macro composite score | :white_check_mark: |
+
+#### Vector & Cross-Domain Analytics (8 tools)
+
+| Tool | Purpose | Status |
+|------|---------|--------|
+| `intel_semantic_search` | Natural-language search across accumulated intelligence | :white_check_mark: |
+| `intel_similar_events` | Similarity search against historical events | :white_check_mark: |
+| `intel_timeline` | Chronological timeline from vector store history | :white_check_mark: |
+| `intel_vector_stats` | Qdrant collection statistics | :white_check_mark: |
+| `intel_collect` | On-demand collection cycle for vector population | :white_check_mark: |
+| `intel_cross_correlate` | Cross-category correlation for a topic/query | :white_check_mark: |
+| `intel_domain_summary` | Per-category summary of stored intelligence | :white_check_mark: |
+| `intel_trend_detection` | Recent-vs-baseline activity surge/drop detection | :white_check_mark: |
 
 ---
 
@@ -299,18 +344,34 @@ BTC technical analysis with SMA-50/200, Mayer Multiple, golden/death cross signa
 ### Phase 13: Country Dossier, Full Tool Exposure & Feed Expansion (+5 = 89 tools)
 `intel_country_dossier`, `intel_traffic_flow`, `intel_traffic_incidents`, `intel_aviation_domestic`, `intel_webcams`
 
-Comprehensive country intelligence dossier aggregating 6 sources in parallel (economy, markets, elections, sanctions, news, security). Exposed 4 previously hidden source functions: TomTom traffic flow (20 cities) and incidents (5 regions), OpenSky global air traffic snapshot, Windy public webcams. RSS feeds expanded from 100 to 119 across 24 categories (+6 new categories: central_asia, arctic, maritime, space, nuclear, climate). 49 CLI commands, 53 tests.
+Comprehensive country intelligence dossier aggregating 6 sources in parallel (economy, markets, elections, sanctions, news, security). Exposed 4 previously hidden source functions: TomTom traffic flow (20 cities) and incidents (5 regions), OpenSky global air traffic snapshot, Windy public webcams. RSS feeds expanded from 100 to 119 across 24 categories (+6 new categories: central_asia, arctic, maritime, space, nuclear, climate). 49 CLI commands; the repo test suite has since grown well beyond this phase snapshot.
+
+### Phase 14: Financial Intelligence Extensions (+12 = 101 tools)
+`intel_forex_rates`, `intel_forex_timeseries`, `intel_major_crosses`, `intel_yield_curve`, `intel_bond_indices`, `intel_earnings_calendar`, `intel_earnings_surprise`, `intel_sec_filings`, `intel_company_filings`, `intel_recent_8k`, `intel_company_profile`, `intel_macro_composite`
+
+Added business / market-intelligence depth: FX rates and timeseries, bond curves and ETF indices, earnings calendar and surprise analysis, SEC EDGAR search and company filings, composite company enrichment, and a weighted macro-composite market regime layer.
+
+### Phase 15: Vector Intelligence (+5 = 106 tools)
+`intel_semantic_search`, `intel_similar_events`, `intel_timeline`, `intel_vector_stats`, `intel_collect`
+
+Qdrant-backed semantic retrieval added across all fetched intelligence, plus timeline reconstruction, store statistics, and on-demand collection. Optional dependencies remain behind `.[vector]` and now degrade cleanly when unavailable.
+
+### Phase 16: Cross-Domain Analytics (+3 = 109 tools)
+`intel_cross_correlate`, `intel_domain_summary`, `intel_trend_detection`
+
+Added historical cross-category correlation, stored-data summarization, and recent-vs-baseline trend detection on top of the vector archive for early-warning and activity-shift analysis.
 
 ---
 
 ## Summary
 
-| Category | Have | Benchmark | Coverage |
-|----------|------|-----------|----------|
-| Data source tools | 89 | 42 | **212%** |
-| Analysis engines | 20 | 15 | **133%** |
-| Static datasets | 18 | 12 | **150%** |
-| RSS feeds | 119 | 150+ | **79%** |
-| Strategic synthesis | Posture + brief + fleet + dossier + exposure + USNI | Dashboard-only | **Exceeds** |
+| Category | Current | Notes |
+|----------|---------|-------|
+| Total MCP tools | 109 | 108 intelligence tools + `intel_status` |
+| Tool parity | 109 / 109 | `TOOLS` and `_dispatch()` are aligned |
+| Static datasets | 18 | Bases, ports, pipelines, nuclear, cables, datacenters, spaceports, minerals, exchanges, trade routes, cloud regions, financial centers |
+| RSS feeds | 119 | 24 categories |
+| Tests in repo | 186 | Full suite requires `.[dev]`; 77 core tests validated in the base environment |
+| Primary remaining gap | Architecture | `server.py` monolith remains the main refactor target |
 
-**Bottom line**: 89 tools across 30+ domains, over 2x WorldMonitor benchmark in tool count, 33% more analysis engines, and 50% more static datasets. 119 RSS feeds across 24 categories. All phases 1-13 complete. Live Starlette dashboard with 39 SSE streams, 14 map layers (with trade route markers), and data freshness monitoring.
+**Bottom line**: 109 tools across 30+ domains, with the roadmap now aligned to the live MCP registry. The main remaining gaps are full-environment test bootstrapping (`.[dev]`) and continued modularization of the monolithic `server.py` tool registry/dispatcher.

@@ -93,11 +93,14 @@ breaker = CircuitBreaker(failure_threshold=3, cooldown_seconds=300)
 # Vector store — optional, degrades gracefully if Qdrant unavailable.
 _vector_store = None
 try:
-    from .vector_store import VectorStore
+    from .vector_store import VectorStore, vector_dependencies_available
 
-    _vector_store = VectorStore(enabled=True)
-except Exception:
-    logger.info("Vector store unavailable (qdrant_client or Qdrant not installed)")
+    if vector_dependencies_available():
+        _vector_store = VectorStore(enabled=True)
+    else:
+        logger.info("Vector store unavailable (qdrant_client / fastembed not installed)")
+except Exception as exc:
+    logger.info("Vector store unavailable: %s", exc)
 
 fetcher = Fetcher(cache=cache, breaker=breaker, vector_store=_vector_store)
 
@@ -2361,7 +2364,10 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
 
         # System
         case "intel_status":
-            vs_stats = {}
+            vs_stats = {
+                "enabled": False,
+                "error": 'Vector store dependencies not installed. Install with `pip install -e ".[vector]"`.',
+            }
             if _vector_store:
                 vs_stats = await _vector_store.collection_stats()
             return {
