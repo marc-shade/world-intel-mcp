@@ -11,10 +11,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
+
 load_dotenv(Path(__file__).resolve().parents[3] / ".env", override=False)
 
 from starlette.applications import Starlette
-from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.routing import Route
 
 from world_intel_mcp.cache import Cache
@@ -53,10 +54,23 @@ from world_intel_mcp.analysis.exposure import fetch_population_exposure
 from world_intel_mcp.analysis.situation import fetch_situation_brief
 from world_intel_mcp.sources.fleet import fetch_fleet_report
 from world_intel_mcp.sources.usni_fleet import fetch_usni_fleet
-from world_intel_mcp.config.countries import INTEL_HOTSPOTS, STRATEGIC_WATERWAYS
-from world_intel_mcp.config.geospatial import MILITARY_BASES, STRATEGIC_PORTS, PIPELINES, NUCLEAR_FACILITIES
+from world_intel_mcp.config.countries import (
+    INTEL_HOTSPOTS,
+    STRATEGIC_WATERWAYS,
+    TIER1_COUNTRIES,
+)
+from world_intel_mcp.config.geospatial import (
+    MILITARY_BASES,
+    STRATEGIC_PORTS,
+    PIPELINES,
+    NUCLEAR_FACILITIES,
+)
 from world_intel_mcp.sources.infrastructure import CABLE_CORRIDORS
-from world_intel_mcp.config.trade_routes import TRADE_ROUTES, CLOUD_REGIONS, FINANCIAL_CENTERS
+from world_intel_mcp.config.trade_routes import (
+    TRADE_ROUTES,
+    CLOUD_REGIONS,
+    FINANCIAL_CENTERS,
+)
 from world_intel_mcp.sources.central_banks import fetch_central_bank_rates
 
 logger = logging.getLogger(__name__)
@@ -81,6 +95,7 @@ def _ensure_fetcher() -> Fetcher:
 # ---------------------------------------------------------------------------
 # Data fetching
 # ---------------------------------------------------------------------------
+
 
 async def _fetch_overview() -> dict:
     """Fetch all dashboard domains in parallel, return unified dict."""
@@ -163,22 +178,42 @@ async def _fetch_overview() -> dict:
     acled_ok = not acled.get("error") and (acled.get("count") or 0) > 0
     ucdp_ok = not ucdp.get("error") and (ucdp.get("count") or 0) > 0
     if not acled_ok and not ucdp_ok:
-        escalation_labels = {1: "low", 2: "low", 3: "moderate", 4: "high", 5: "critical"}
-        hotspot_events = [
-            {
-                "latitude": h["lat"],
-                "longitude": h["lon"],
-                "country": name.replace("_", " ").title(),
-                "event_type": "conflict zone",
-                "type_of_violence_label": "active hotspot",
-                "fatalities": 0,
-                "best": 0,
-                "escalation": h["baseline_escalation"],
-                "severity": escalation_labels.get(h["baseline_escalation"], "unknown"),
-                "associated_countries": h.get("associated_countries", []),
-            }
-            for name, h in INTEL_HOTSPOTS.items()
-        ]
+        escalation_labels = {
+            1: "low",
+            2: "low",
+            3: "moderate",
+            4: "high",
+            5: "critical",
+        }
+        # Map ISO codes to country names for richer display
+        _iso_names = {c: info["name"] for c, info in TIER1_COUNTRIES.items()}
+        hotspot_events = []
+        for name, h in INTEL_HOTSPOTS.items():
+            assoc = h.get("associated_countries", [])
+            country_name = _iso_names.get(assoc[0], "") if assoc else ""
+            actors = [_iso_names.get(c, c) for c in assoc]
+            esc = h["baseline_escalation"]
+            hotspot_events.append(
+                {
+                    "latitude": h["lat"],
+                    "longitude": h["lon"],
+                    "country": country_name or name.replace("_", " ").title(),
+                    "location": name.replace("_", " ").title(),
+                    "event_type": "Active Hotspot",
+                    "type_of_violence_label": "active hotspot",
+                    "fatalities": 0,
+                    "best": 0,
+                    "escalation": esc,
+                    "severity": escalation_labels.get(esc, "unknown"),
+                    "event_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "actor1": actors[0] if len(actors) > 0 else "\u2014",
+                    "actor2": actors[1] if len(actors) > 1 else "\u2014",
+                    "source": "Intel Hotspot Database",
+                    "notes": f"Escalation level {esc}/5 ({escalation_labels.get(esc, 'unknown')}). "
+                    f"Monitored hotspot involving {', '.join(actors)}.",
+                    "associated_countries": assoc,
+                }
+            )
         result["conflict_zones"] = {
             "events": hotspot_events,
             "count": len(hotspot_events),
@@ -187,16 +222,33 @@ async def _fetch_overview() -> dict:
 
     # Static geospatial datasets (no API calls)
     result["military_bases"] = {"bases": MILITARY_BASES, "count": len(MILITARY_BASES)}
-    result["strategic_ports"] = {"ports": STRATEGIC_PORTS, "count": len(STRATEGIC_PORTS)}
+    result["strategic_ports"] = {
+        "ports": STRATEGIC_PORTS,
+        "count": len(STRATEGIC_PORTS),
+    }
     result["pipelines"] = {"pipelines": PIPELINES, "count": len(PIPELINES)}
-    result["nuclear_facilities"] = {"facilities": NUCLEAR_FACILITIES, "count": len(NUCLEAR_FACILITIES)}
-    result["waterways"] = {"waterways": STRATEGIC_WATERWAYS, "count": len(STRATEGIC_WATERWAYS)}
+    result["nuclear_facilities"] = {
+        "facilities": NUCLEAR_FACILITIES,
+        "count": len(NUCLEAR_FACILITIES),
+    }
+    result["waterways"] = {
+        "waterways": STRATEGIC_WATERWAYS,
+        "count": len(STRATEGIC_WATERWAYS),
+    }
     result["trade_routes"] = {"routes": TRADE_ROUTES, "count": len(TRADE_ROUTES)}
     result["cloud_regions"] = {"regions": CLOUD_REGIONS, "count": len(CLOUD_REGIONS)}
-    result["financial_centers"] = {"centers": FINANCIAL_CENTERS, "count": len(FINANCIAL_CENTERS)}
+    result["financial_centers"] = {
+        "centers": FINANCIAL_CENTERS,
+        "count": len(FINANCIAL_CENTERS),
+    }
     result["cable_corridors"] = {
         "corridors": [
-            {"name": n, "lat_range": c["lat_range"], "lon_range": c["lon_range"], "cables": c["cables"]}
+            {
+                "name": n,
+                "lat_range": c["lat_range"],
+                "lon_range": c["lon_range"],
+                "cables": c["cables"],
+            }
             for n, c in CABLE_CORRIDORS.items()
         ],
         "count": len(CABLE_CORRIDORS),
@@ -205,7 +257,8 @@ async def _fetch_overview() -> dict:
     # AI situational brief (runs after main gather so it has all data)
     try:
         result["situation_brief"] = await asyncio.wait_for(
-            fetch_situation_brief(result), timeout=35.0,
+            fetch_situation_brief(result),
+            timeout=35.0,
         )
     except Exception as exc:
         logger.warning("Situation brief failed: %s", exc)
@@ -223,6 +276,7 @@ async def _fetch_overview() -> dict:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
 
 async def index(request):
     """Serve the dashboard HTML page (reloads on each request during dev)."""
@@ -269,23 +323,43 @@ async def api_static(request):
     The dashboard fetches this on boot so the infrastructure layer
     populates immediately without waiting for the full SSE gather.
     """
-    return JSONResponse({
-        "military_bases": {"bases": MILITARY_BASES, "count": len(MILITARY_BASES)},
-        "strategic_ports": {"ports": STRATEGIC_PORTS, "count": len(STRATEGIC_PORTS)},
-        "pipelines": {"pipelines": PIPELINES, "count": len(PIPELINES)},
-        "nuclear_facilities": {"facilities": NUCLEAR_FACILITIES, "count": len(NUCLEAR_FACILITIES)},
-        "waterways": {"waterways": STRATEGIC_WATERWAYS, "count": len(STRATEGIC_WATERWAYS)},
-        "cable_corridors": {
-            "corridors": [
-                {"name": n, "lat_range": c["lat_range"], "lon_range": c["lon_range"], "cables": c["cables"]}
-                for n, c in CABLE_CORRIDORS.items()
-            ],
-            "count": len(CABLE_CORRIDORS),
+    return JSONResponse(
+        {
+            "military_bases": {"bases": MILITARY_BASES, "count": len(MILITARY_BASES)},
+            "strategic_ports": {
+                "ports": STRATEGIC_PORTS,
+                "count": len(STRATEGIC_PORTS),
+            },
+            "pipelines": {"pipelines": PIPELINES, "count": len(PIPELINES)},
+            "nuclear_facilities": {
+                "facilities": NUCLEAR_FACILITIES,
+                "count": len(NUCLEAR_FACILITIES),
+            },
+            "waterways": {
+                "waterways": STRATEGIC_WATERWAYS,
+                "count": len(STRATEGIC_WATERWAYS),
+            },
+            "cable_corridors": {
+                "corridors": [
+                    {
+                        "name": n,
+                        "lat_range": c["lat_range"],
+                        "lon_range": c["lon_range"],
+                        "cables": c["cables"],
+                    }
+                    for n, c in CABLE_CORRIDORS.items()
+                ],
+                "count": len(CABLE_CORRIDORS),
+            },
+            "trade_routes": {"routes": TRADE_ROUTES, "count": len(TRADE_ROUTES)},
+            "cloud_regions": {"regions": CLOUD_REGIONS, "count": len(CLOUD_REGIONS)},
+            "financial_centers": {
+                "centers": FINANCIAL_CENTERS,
+                "count": len(FINANCIAL_CENTERS),
+            },
         },
-        "trade_routes": {"routes": TRADE_ROUTES, "count": len(TRADE_ROUTES)},
-        "cloud_regions": {"regions": CLOUD_REGIONS, "count": len(CLOUD_REGIONS)},
-        "financial_centers": {"centers": FINANCIAL_CENTERS, "count": len(FINANCIAL_CENTERS)},
-    }, headers={"Access-Control-Allow-Origin": "*"})
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
 
 
 async def api_health(request):
