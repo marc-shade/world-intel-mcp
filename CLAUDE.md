@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-World Intelligence MCP Server — 106 tools across 30+ domains providing real-time global intelligence from free public APIs. Serves four interfaces: MCP stdio (for Claude Code/Cursor), a live Starlette dashboard with SSE, a Click CLI with Rich output, and a collector daemon for 24/7 vector store population. Python 3.11+, built with hatchling.
+World Intelligence MCP Server — 109 tools across 30+ domains providing real-time global intelligence from free public APIs. Serves four interfaces: MCP stdio (for Claude Code/Cursor), a live Starlette dashboard with SSE, a Click CLI with Rich output, and a collector daemon for 24/7 vector store population. Python 3.11+, built with hatchling.
 
 ## Commands
 

@@ -6,7 +6,7 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-green)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-Real-time global intelligence across **30+ domains** with **106 MCP tools**, a live ops-center dashboard, a CLI, and a **Qdrant vector store** for enterprise-grade semantic search across accumulated intelligence. All data comes from free, public APIs — no paid subscriptions required.
+Real-time global intelligence across **30+ domains** with **109 MCP tools**, a live ops-center dashboard, a CLI, and a **Qdrant vector store** for enterprise-grade semantic search across accumulated intelligence. All data comes from free, public APIs — no paid subscriptions required.
 
 Built for AI agents that need world awareness: market conditions, geopolitical risk, military posture, supply chain disruptions, cyber threats, and more — all queryable via the Model Context Protocol. The vector store enables natural language queries like *"military activity near Taiwan"* or *"cyber threats targeting healthcare"* across all historical data.
 
@@ -54,9 +54,10 @@ Built for AI agents that need world awareness: market conditions, geopolitical r
 | **Cross-Domain** | 2 | Alert digest, weekly trends |
 
 | **Vector Search** | 5 | Qdrant semantic search, similarity, timeline, collection |
+| **Cross-Domain Analytics** | 3 | Correlation, domain summary, trend detection |
 | **Data Collection** | 1 | On-demand collector trigger |
 
-**Total: 106 tools** across 30+ intelligence domains.
+**Total: 109 tools** across 30+ intelligence domains.
 
 ---
 
@@ -332,6 +333,13 @@ collector.py (daemon)  ──┘
 | `intel_timeline` | Chronological view of intelligence for a domain/category |
 | `intel_vector_stats` | Vector store collection statistics |
 | `intel_collect` | Trigger an on-demand collection cycle |
+
+### Cross-Domain Analytics (3)
+| Tool | Description |
+|------|-------------|
+| `intel_cross_correlate` | Find correlated signals across all domains for a given topic |
+| `intel_domain_summary` | Per-category summary of stored intelligence (counts, sources, recency) |
+| `intel_trend_detection` | Detect activity surges/drops by comparing recent vs baseline periods |
 
 ---
 

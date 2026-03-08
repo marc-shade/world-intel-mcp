@@ -28,6 +28,8 @@ Phase 15: Business intelligence — forex (3), bonds/yields (2), earnings (2), S
 Phase 16: Vector intelligence — semantic search, similar events, timeline, vector stats,
           on-demand collection (+5 = 104 tools). Qdrant vector store auto-populates from all fetches.
           Collector daemon for 24/7 data accumulation. Enterprise-grade semantic retrieval.
+Phase 17: Cross-domain analytics — cross-domain correlation, domain summary, trend detection
+          (+3 = 109 tools). Historical analysis and early warning from accumulated vector data.
 """
 
 import asyncio
@@ -1636,6 +1638,67 @@ TOOLS: list[Tool] = [
             },
         },
     ),
+    Tool(
+        name="intel_cross_correlate",
+        description="Cross-domain intelligence correlation. Given a topic, finds related signals across ALL intelligence domains (military, financial, cyber, conflict, etc.) and groups them by category. Shows how events ripple across domains — e.g., how a military buildup correlates with market movements and news coverage.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Topic to correlate across domains (e.g., 'Taiwan strait tensions', 'oil supply disruption')",
+                },
+                "hours": {
+                    "type": "number",
+                    "description": "Time window in hours (default 24)",
+                    "default": 24,
+                },
+                "limit_per_domain": {
+                    "type": "integer",
+                    "description": "Max signals per domain category (default 5)",
+                    "default": 5,
+                },
+            },
+            "required": ["query"],
+        },
+    ),
+    Tool(
+        name="intel_domain_summary",
+        description="Summary of all intelligence data stored in the vector database. Shows per-category data point counts, unique sources, latest/earliest timestamps, and total events tracked. Answers: what intelligence do we have and how recent is it?",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "hours": {
+                    "type": "number",
+                    "description": "Time window in hours (default 24)",
+                    "default": 24,
+                },
+            },
+        },
+    ),
+    Tool(
+        name="intel_trend_detection",
+        description="Detect activity trends by comparing recent intelligence activity against a baseline. Identifies SURGE (>50% increase), ELEVATED (>20%), DECLINING (<-20%), and DROP (<-50%) patterns. Useful for early warning when a domain suddenly spikes or goes quiet.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "description": "Focus on one category (e.g., 'Conflict & Security'). Default: all categories.",
+                },
+                "recent_hours": {
+                    "type": "number",
+                    "description": "Recent window to measure (default 6 hours)",
+                    "default": 6,
+                },
+                "baseline_hours": {
+                    "type": "number",
+                    "description": "Baseline window for comparison (default 48 hours)",
+                    "default": 48,
+                },
+            },
+        },
+    ),
     # --- System (1 tool) ---
     Tool(
         name="intel_status",
@@ -2271,6 +2334,29 @@ async def _dispatch(name: str, arguments: dict[str, Any]) -> Any:
                     if not arguments.get("sources")
                     else set(arguments["sources"].split(","))
                 ),
+            )
+
+        case "intel_cross_correlate":
+            if _vector_store is None:
+                return {"error": "Vector store not available (Qdrant not running?)"}
+            return await _vector_store.cross_domain_correlate(
+                query=arguments["query"],
+                hours=arguments.get("hours", 24.0),
+                limit_per_domain=arguments.get("limit_per_domain", 5),
+            )
+        case "intel_domain_summary":
+            if _vector_store is None:
+                return {"error": "Vector store not available (Qdrant not running?)"}
+            return await _vector_store.domain_summary(
+                hours=arguments.get("hours", 24.0),
+            )
+        case "intel_trend_detection":
+            if _vector_store is None:
+                return {"error": "Vector store not available (Qdrant not running?)"}
+            return await _vector_store.trend_detection(
+                category=arguments.get("category"),
+                recent_hours=arguments.get("recent_hours", 6.0),
+                baseline_hours=arguments.get("baseline_hours", 48.0),
             )
 
         # System

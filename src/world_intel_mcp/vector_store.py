@@ -652,3 +652,306 @@ class VectorStore:
             "embedding_model": EMBEDDING_MODEL,
             "embedding_dim": EMBEDDING_DIM,
         }
+
+    # ------------------------------------------------------------------
+    # Cross-domain correlation
+    # ------------------------------------------------------------------
+
+    async def cross_domain_correlate(
+        self,
+        query: str,
+        hours: float = 24.0,
+        limit_per_domain: int = 5,
+    ) -> dict:
+        """Find correlated signals across multiple intelligence domains.
+
+        Given a topic, searches all domains and groups results by category,
+        showing how different intelligence streams relate to the same event.
+        """
+        return await asyncio.to_thread(
+            self._correlate_sync, query, hours, limit_per_domain
+        )
+
+    def _correlate_sync(
+        self,
+        query: str,
+        hours: float,
+        limit_per_domain: int,
+    ) -> dict:
+        from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
+
+        client = _get_qdrant()
+        vector = _embed_text(query)
+
+        conditions = [
+            FieldCondition(key="has_error", match=MatchValue(value=False)),
+        ]
+        if hours:
+            cutoff = time.time() - (hours * 3600)
+            conditions.append(FieldCondition(key="timestamp", range=Range(gte=cutoff)))
+
+        # Fetch more results to ensure coverage across domains
+        results = client.search(
+            collection_name=COLLECTION_NAME,
+            query_vector=vector,
+            query_filter=Filter(must=conditions),
+            limit=100,
+            with_payload=True,
+        )
+
+        # Group by category, keep top N per category
+        by_category: dict[str, list[dict]] = {}
+        for r in results:
+            cat = r.payload.get("category", "Other")
+            if cat not in by_category:
+                by_category[cat] = []
+            if len(by_category[cat]) < limit_per_domain:
+                by_category[cat].append(
+                    {
+                        "score": round(r.score, 4),
+                        "domain": r.payload.get("domain", ""),
+                        "text": r.payload.get("text", "")[:300],
+                        "datetime": r.payload.get("datetime", ""),
+                        "country": r.payload.get("country"),
+                    }
+                )
+
+        # Sort categories by best score
+        sorted_cats = sorted(
+            by_category.items(),
+            key=lambda kv: max(e["score"] for e in kv[1]) if kv[1] else 0,
+            reverse=True,
+        )
+
+        return {
+            "query": query,
+            "hours": hours,
+            "domains_found": len(by_category),
+            "correlations": [
+                {
+                    "category": cat,
+                    "signal_count": len(entries),
+                    "best_score": max(e["score"] for e in entries),
+                    "signals": entries,
+                }
+                for cat, entries in sorted_cats
+            ],
+            "total_signals": sum(len(v) for v in by_category.values()),
+        }
+
+    # ------------------------------------------------------------------
+    # Domain summary
+    # ------------------------------------------------------------------
+
+    async def domain_summary(self, hours: float = 24.0) -> dict:
+        """Get per-domain summary of stored intelligence."""
+        return await asyncio.to_thread(self._domain_summary_sync, hours)
+
+    def _domain_summary_sync(self, hours: float) -> dict:
+        from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
+
+        client = _get_qdrant()
+        cutoff = time.time() - (hours * 3600)
+
+        # Scroll all points in the time window (no vector search)
+        conditions = [
+            FieldCondition(key="timestamp", range=Range(gte=cutoff)),
+            FieldCondition(key="has_error", match=MatchValue(value=False)),
+        ]
+
+        all_points = []
+        offset = None
+        while True:
+            points, next_offset = client.scroll(
+                collection_name=COLLECTION_NAME,
+                scroll_filter=Filter(must=conditions),
+                limit=200,
+                offset=offset,
+                with_payload=["domain", "category", "timestamp", "event_count"],
+            )
+            all_points.extend(points)
+            if next_offset is None or len(points) == 0:
+                break
+            offset = next_offset
+
+        # Aggregate by category
+        by_category: dict[str, dict] = {}
+        for p in all_points:
+            cat = p.payload.get("category", "Other")
+            if cat not in by_category:
+                by_category[cat] = {
+                    "count": 0,
+                    "domains": set(),
+                    "latest": 0.0,
+                    "earliest": float("inf"),
+                    "total_events": 0,
+                }
+            entry = by_category[cat]
+            entry["count"] += 1
+            entry["domains"].add(p.payload.get("domain", ""))
+            ts = p.payload.get("timestamp", 0)
+            entry["latest"] = max(entry["latest"], ts)
+            entry["earliest"] = min(entry["earliest"], ts)
+            ec = p.payload.get("event_count")
+            if ec and isinstance(ec, (int, float)):
+                entry["total_events"] += int(ec)
+
+        # Convert sets to lists and format
+        summaries = []
+        for cat, info in sorted(
+            by_category.items(), key=lambda kv: kv[1]["count"], reverse=True
+        ):
+            summaries.append(
+                {
+                    "category": cat,
+                    "data_points": info["count"],
+                    "unique_sources": len(info["domains"]),
+                    "sources": sorted(info["domains"]),
+                    "total_events_tracked": info["total_events"] or None,
+                    "latest": datetime.fromtimestamp(
+                        info["latest"], tz=timezone.utc
+                    ).isoformat()
+                    if info["latest"] > 0
+                    else None,
+                    "earliest": datetime.fromtimestamp(
+                        info["earliest"], tz=timezone.utc
+                    ).isoformat()
+                    if info["earliest"] < float("inf")
+                    else None,
+                }
+            )
+
+        return {
+            "hours": hours,
+            "total_data_points": len(all_points),
+            "categories": len(summaries),
+            "summary": summaries,
+        }
+
+    # ------------------------------------------------------------------
+    # Trend detection (activity anomalies)
+    # ------------------------------------------------------------------
+
+    async def trend_detection(
+        self,
+        category: str | None = None,
+        recent_hours: float = 6.0,
+        baseline_hours: float = 48.0,
+    ) -> dict:
+        """Detect activity trends by comparing recent vs baseline periods.
+
+        Compares data point density in the recent window against the baseline
+        to identify surges or drops in intelligence activity.
+        """
+        return await asyncio.to_thread(
+            self._trend_sync, category, recent_hours, baseline_hours
+        )
+
+    def _trend_sync(
+        self,
+        category: str | None,
+        recent_hours: float,
+        baseline_hours: float,
+    ) -> dict:
+        from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
+
+        client = _get_qdrant()
+        now = time.time()
+        recent_cutoff = now - (recent_hours * 3600)
+        baseline_cutoff = now - (baseline_hours * 3600)
+
+        base_conditions = [
+            FieldCondition(key="has_error", match=MatchValue(value=False)),
+        ]
+        if category:
+            base_conditions.append(
+                FieldCondition(key="category", match=MatchValue(value=category))
+            )
+
+        def _count_in_window(start: float, end: float) -> dict[str, int]:
+            """Count points per category in a time window."""
+            conditions = base_conditions + [
+                FieldCondition(key="timestamp", range=Range(gte=start, lte=end)),
+            ]
+            points = []
+            offset = None
+            while True:
+                batch, next_offset = client.scroll(
+                    collection_name=COLLECTION_NAME,
+                    scroll_filter=Filter(must=conditions),
+                    limit=200,
+                    offset=offset,
+                    with_payload=["category"],
+                )
+                points.extend(batch)
+                if next_offset is None or len(batch) == 0:
+                    break
+                offset = next_offset
+            counts: dict[str, int] = {}
+            for p in points:
+                cat = p.payload.get("category", "Other")
+                counts[cat] = counts.get(cat, 0) + 1
+            return counts
+
+        recent_counts = _count_in_window(recent_cutoff, now)
+        baseline_counts = _count_in_window(baseline_cutoff, recent_cutoff)
+
+        # Normalize baseline to per-hour rate
+        baseline_window = baseline_hours - recent_hours
+        if baseline_window <= 0:
+            baseline_window = 1.0
+
+        all_cats = set(recent_counts.keys()) | set(baseline_counts.keys())
+        trends = []
+        for cat in sorted(all_cats):
+            recent = recent_counts.get(cat, 0)
+            baseline = baseline_counts.get(cat, 0)
+
+            recent_rate = recent / recent_hours if recent_hours > 0 else 0
+            baseline_rate = baseline / baseline_window if baseline_window > 0 else 0
+
+            if baseline_rate > 0:
+                change_pct = ((recent_rate - baseline_rate) / baseline_rate) * 100
+            elif recent_rate > 0:
+                change_pct = 100.0  # New activity
+            else:
+                change_pct = 0.0
+
+            # Classify
+            if change_pct > 50:
+                trend = "SURGE"
+            elif change_pct > 20:
+                trend = "ELEVATED"
+            elif change_pct < -50:
+                trend = "DROP"
+            elif change_pct < -20:
+                trend = "DECLINING"
+            else:
+                trend = "NORMAL"
+
+            trends.append(
+                {
+                    "category": cat,
+                    "recent_count": recent,
+                    "baseline_count": baseline,
+                    "recent_rate_per_hr": round(recent_rate, 2),
+                    "baseline_rate_per_hr": round(baseline_rate, 2),
+                    "change_pct": round(change_pct, 1),
+                    "trend": trend,
+                }
+            )
+
+        # Sort by absolute change
+        trends.sort(key=lambda t: abs(t["change_pct"]), reverse=True)
+
+        surges = [t for t in trends if t["trend"] == "SURGE"]
+        drops = [t for t in trends if t["trend"] == "DROP"]
+
+        return {
+            "recent_window_hours": recent_hours,
+            "baseline_window_hours": baseline_hours,
+            "categories_analyzed": len(trends),
+            "surges": len(surges),
+            "drops": len(drops),
+            "trends": trends,
+        }
