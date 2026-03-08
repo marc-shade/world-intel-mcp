@@ -383,6 +383,122 @@ async def api_report_pdf(request):
     )
 
 
+async def sse_vector_analytics(request):
+    """SSE endpoint — pushes vector store analytics every 30 seconds."""
+
+    async def event_generator():
+        while True:
+            try:
+                payload = await _fetch_vector_analytics()
+                yield f"data: {json.dumps(payload, default=str)}\n\n"
+            except asyncio.CancelledError:
+                return
+            except Exception as exc:
+                logger.exception("Vector analytics SSE tick failed")
+                yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+            await asyncio.sleep(30)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+
+
+async def _fetch_vector_analytics() -> dict:
+    """Gather vector store stats, domain summary, and trend detection."""
+    _ensure_fetcher()
+    if _vector_store is None:
+        return {
+            "available": False,
+            "error": "Vector store not available (Qdrant not running)",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    stats_coro = _vector_store.collection_stats()
+    domain_coro = _vector_store.domain_summary(hours=24.0)
+    trend_coro = _vector_store.trend_detection(recent_hours=6.0, baseline_hours=48.0)
+
+    gathered = await asyncio.gather(
+        stats_coro, domain_coro, trend_coro, return_exceptions=True
+    )
+
+    result: dict = {"available": True}
+    names = ("stats", "domain_summary", "trends")
+    for name, data in zip(names, gathered):
+        if isinstance(data, Exception):
+            logger.warning("Vector analytics %s failed: %s", name, data)
+            result[name] = {"error": str(data)}
+        else:
+            result[name] = data
+    result["timestamp"] = datetime.now(timezone.utc).isoformat()
+    return result
+
+
+async def api_vector_search(request):
+    """POST endpoint for semantic search against the vector store."""
+    _ensure_fetcher()
+    if _vector_store is None:
+        return JSONResponse(
+            {"error": "Vector store not available (Qdrant not running)"},
+            status_code=503,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"error": "Invalid JSON body"},
+            status_code=400,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    query = body.get("query", "").strip()
+    if not query:
+        return JSONResponse(
+            {"error": "Missing 'query' parameter"},
+            status_code=400,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    hours = body.get("hours")
+    category = body.get("category")
+    limit = min(int(body.get("limit", 20)), 50)
+
+    try:
+        results = await _vector_store.semantic_search(
+            query=query,
+            limit=limit,
+            category=category,
+            hours=float(hours) if hours else None,
+        )
+        return JSONResponse(results, headers={"Access-Control-Allow-Origin": "*"})
+    except Exception as exc:
+        logger.exception("Vector search failed")
+        return JSONResponse(
+            {"error": str(exc)},
+            status_code=500,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+
+async def api_vector_search_options(request):
+    """CORS preflight for vector search."""
+    return JSONResponse(
+        {},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
@@ -404,6 +520,9 @@ app = Starlette(
         Route("/api/static", api_static),
         Route("/api/health", api_health),
         Route("/api/report/pdf", api_report_pdf),
+        Route("/sse/vector-analytics", sse_vector_analytics),
+        Route("/api/vector-search", api_vector_search, methods=["POST"]),
+        Route("/api/vector-search", api_vector_search_options, methods=["OPTIONS"]),
     ],
     on_startup=[on_startup],
 )

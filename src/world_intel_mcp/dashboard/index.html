@@ -325,6 +325,66 @@ a { color: var(--accent); text-decoration: none; }
 .risk-fill.med { background: linear-gradient(90deg, var(--blue), #80c4ff); }
 .risk-fill.low { background: linear-gradient(90deg, var(--green), #66e6b3); }
 
+/* ═══════════════ VECTOR INTELLIGENCE PANEL ═══════════════ */
+#vectorPanel {
+    position: fixed; bottom: 44px; left: 10px; z-index: 40;
+    width: 310px; max-height: 420px;
+    overflow-y: auto; overflow-x: hidden;
+    padding: 12px 14px;
+    transition: transform 0.4s var(--ease), opacity 0.3s;
+}
+#vectorPanel.hidden { transform: translateY(20px); opacity: 0; pointer-events: none; }
+.vec-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.vec-title { font-size: 0.62rem; font-weight: 600; letter-spacing: 2.5px; color: var(--accent); text-transform: uppercase; }
+.vec-stat { font-family: var(--mono); font-size: 0.6rem; color: var(--dim); }
+.vec-stat .v { color: var(--bright); font-weight: 600; }
+.vec-cats { margin: 6px 0 8px; }
+.vec-cat-row {
+    display: flex; align-items: center; gap: 6px; padding: 3px 0;
+    font-size: 0.66rem; border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+.vec-cat-row .cat-name { flex: 1; color: var(--text); }
+.vec-cat-row .cat-count { font-family: var(--mono); color: var(--bright); min-width: 28px; text-align: right; font-weight: 600; }
+.vec-trend-tag {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    font-family: var(--mono); font-size: 0.56rem; font-weight: 600;
+    letter-spacing: 0.5px;
+}
+.vec-trend-tag.surge { background: rgba(255,59,59,0.12); color: var(--red); }
+.vec-trend-tag.elevated { background: rgba(255,159,28,0.1); color: var(--amber); }
+.vec-trend-tag.normal { background: rgba(52,211,153,0.08); color: var(--green); }
+.vec-trend-tag.drop { background: rgba(77,168,255,0.1); color: var(--blue); }
+.vec-trend-tag.declining { background: rgba(77,168,255,0.08); color: var(--blue); opacity: 0.7; }
+.vec-search-wrap {
+    display: flex; gap: 4px; margin: 8px 0 4px;
+}
+.vec-search-input {
+    flex: 1; padding: 5px 8px; border-radius: 5px;
+    background: rgba(0,0,0,0.35); border: 1px solid var(--border);
+    color: var(--bright); font-family: var(--mono); font-size: 0.65rem;
+    outline: none; transition: border-color 0.2s;
+}
+.vec-search-input:focus { border-color: rgba(0,229,255,0.3); }
+.vec-search-input::placeholder { color: var(--dim); }
+.vec-search-btn {
+    padding: 5px 10px; border-radius: 5px;
+    background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.15);
+    color: var(--accent); font-family: var(--mono); font-size: 0.6rem;
+    cursor: pointer; transition: background 0.2s;
+}
+.vec-search-btn:hover { background: rgba(0,229,255,0.15); }
+.vec-search-btn:disabled { opacity: 0.4; cursor: default; }
+.vec-results { margin-top: 6px; }
+.vec-result-item {
+    padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.02);
+    font-size: 0.64rem;
+}
+.vec-result-item .r-score { font-family: var(--mono); color: var(--accent); font-weight: 600; }
+.vec-result-item .r-domain { font-family: var(--mono); color: var(--dim); font-size: 0.56rem; text-transform: uppercase; letter-spacing: 0.5px; }
+.vec-result-item .r-text { color: var(--text); margin-top: 2px; line-height: 1.3; }
+.vec-result-item .r-time { font-family: var(--mono); color: var(--dim); font-size: 0.56rem; }
+.vec-unavail { font-size: 0.65rem; color: var(--dim); padding: 8px 0; text-align: center; }
+
 /* ═══════════════ GAUGE ═══════════════ */
 .gauge-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; }
 .gauge-track { flex: 1; height: 8px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: hidden; }
@@ -719,6 +779,20 @@ a { color: var(--accent); text-decoration: none; }
     <div class="ticker-track">
         <div class="ticker-scroll" id="tickerContent"></div>
     </div>
+</div>
+
+<!-- VECTOR INTELLIGENCE PANEL -->
+<div id="vectorPanel" class="glass hidden">
+    <div class="vec-header">
+        <span class="vec-title">Vector Intelligence</span>
+        <span class="vec-stat" id="vecPointCount"></span>
+    </div>
+    <div id="vecContent"><div class="vec-unavail">Connecting...</div></div>
+    <div class="vec-search-wrap">
+        <input type="text" class="vec-search-input" id="vecSearchInput" placeholder="Semantic search..." autocomplete="off">
+        <button class="vec-search-btn" id="vecSearchBtn">Search</button>
+    </div>
+    <div class="vec-results" id="vecResults"></div>
 </div>
 
 <script>
@@ -3088,6 +3162,139 @@ fetch('/api/static')
     .catch(function(e) { console.warn('static fetch failed:', e); });
 
 connectSSE();
+
+// ════════════ VECTOR INTELLIGENCE SSE ════════════
+
+function updateVectorPanel(vd) {
+    var panel = $('#vectorPanel');
+    if (!vd || !vd.available) {
+        panel.classList.add('hidden');
+        return;
+    }
+    panel.classList.remove('hidden');
+
+    // Points count in header
+    var stats = vd.stats || {};
+    var pts = stats.points_count || 0;
+    var status = stats.status || 'unknown';
+    var statusColor = status === 'green' ? 'var(--green)' : status === 'yellow' ? 'var(--amber)' : 'var(--dim)';
+    $('#vecPointCount').innerHTML = safe(
+        '<span class="v">' + fmtNum(pts) + '</span> pts ' +
+        '<span style="color:' + statusColor + '">' + esc(status) + '</span>'
+    );
+
+    var h = '';
+
+    // Domain summary table
+    var ds = vd.domain_summary || {};
+    var cats = ds.summary || [];
+    if (cats.length > 0) {
+        h += '<div class="vec-cats">';
+        cats.slice(0, 12).forEach(function(c) {
+            h += '<div class="vec-cat-row">';
+            h += '<span class="cat-name">' + esc(c.category) + '</span>';
+            h += '<span class="cat-count">' + (c.data_points || 0) + '</span>';
+            h += '</div>';
+        });
+        h += '</div>';
+    }
+
+    // Trend indicators
+    var trends = vd.trends || {};
+    var trendList = trends.trends || [];
+    if (trendList.length > 0) {
+        h += '<div style="font-size:0.56rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;margin:4px 0 3px">Activity Trends (6h vs 48h)</div>';
+        h += '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px">';
+        trendList.forEach(function(t) {
+            var tcls = t.trend === 'SURGE' ? 'surge' : t.trend === 'ELEVATED' ? 'elevated' : t.trend === 'DROP' ? 'drop' : t.trend === 'DECLINING' ? 'declining' : 'normal';
+            var arrow = t.trend === 'SURGE' ? '\u2191\u2191' : t.trend === 'ELEVATED' ? '\u2191' : t.trend === 'DROP' ? '\u2193\u2193' : t.trend === 'DECLINING' ? '\u2193' : '\u2022';
+            var shortCat = t.category.length > 16 ? t.category.substring(0, 14) + '..' : t.category;
+            h += '<span class="vec-trend-tag ' + tcls + '" title="' + esc(t.category) + ': ' + (t.change_pct > 0 ? '+' : '') + t.change_pct + '%">';
+            h += arrow + ' ' + esc(shortCat);
+            h += '</span>';
+        });
+        h += '</div>';
+    }
+
+    $('#vecContent').innerHTML = safe(h);
+}
+
+// Vector search
+var _vecSearching = false;
+function doVecSearch() {
+    var q = $('#vecSearchInput').value.trim();
+    if (!q || _vecSearching) return;
+    _vecSearching = true;
+    $('#vecSearchBtn').disabled = true;
+    $('#vecSearchBtn').textContent = '...';
+    $('#vecResults').innerHTML = safe('<div class="vec-unavail">Searching...</div>');
+
+    fetch('/api/vector-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q, limit: 10 })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var h = '';
+        if (data.error) {
+            h = '<div class="vec-unavail">' + esc(data.error) + '</div>';
+        } else {
+            var results = data.results || [];
+            if (results.length === 0) {
+                h = '<div class="vec-unavail">No results found</div>';
+            } else {
+                results.forEach(function(r) {
+                    h += '<div class="vec-result-item">';
+                    h += '<div style="display:flex;justify-content:space-between;align-items:baseline">';
+                    h += '<span class="r-score">' + r.score + '</span>';
+                    h += '<span class="r-domain">' + esc(r.category || r.domain) + '</span>';
+                    h += '</div>';
+                    h += '<div class="r-text">' + esc(trunc(r.text || '', 150)) + '</div>';
+                    if (r.datetime) {
+                        h += '<div class="r-time">' + ago(new Date(r.datetime).getTime()) + ' ago</div>';
+                    }
+                    h += '</div>';
+                });
+            }
+        }
+        $('#vecResults').innerHTML = safe(h);
+    })
+    .catch(function(e) {
+        $('#vecResults').innerHTML = safe('<div class="vec-unavail">Search failed: ' + esc(String(e)) + '</div>');
+    })
+    .finally(function() {
+        _vecSearching = false;
+        $('#vecSearchBtn').disabled = false;
+        $('#vecSearchBtn').textContent = 'Search';
+    });
+}
+
+$('#vecSearchBtn').addEventListener('click', doVecSearch);
+$('#vecSearchInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); doVecSearch(); }
+    e.stopPropagation();
+});
+
+// SSE connection for vector analytics
+var vecReconnectDelay = 1000;
+function connectVectorSSE() {
+    var source = new EventSource('/sse/vector-analytics');
+    source.onmessage = function(event) {
+        try {
+            var data = JSON.parse(event.data);
+            updateVectorPanel(data);
+        } catch (e) { console.error('Vector SSE parse error:', e); }
+    };
+    source.onerror = function() {
+        source.close();
+        // Hide panel on disconnect — it will re-appear on reconnect
+        setTimeout(connectVectorSSE, vecReconnectDelay);
+        vecReconnectDelay = Math.min(vecReconnectDelay * 2, 30000);
+    };
+    source.onopen = function() { vecReconnectDelay = 1000; };
+}
+connectVectorSSE();
 </script>
 </body>
 </html>
