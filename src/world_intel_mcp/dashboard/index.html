@@ -813,6 +813,7 @@ function cls(n) { return n == null ? '' : n >= 0 ? 'up' : 'down'; }
 function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function trunc(s, n) { n = n || 50; s = s || ''; return s.length > n ? s.slice(0, n) + '\u2026' : s; }
 function ago(ts) { if (!ts) return '\u2014'; var s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000); if (s < 60) return s + 's'; if (s < 3600) return Math.floor(s/60) + 'm'; if (s < 86400) return Math.floor(s/3600) + 'h'; return Math.floor(s/86400) + 'd'; }
+function _withinTimeWindow(ts) { if (!ts) return true; var age = Date.now() - new Date(ts).getTime(); return age < 7 * 86400000; }
 
 // ════════════ STATE ════════════
 var latestData = null;
