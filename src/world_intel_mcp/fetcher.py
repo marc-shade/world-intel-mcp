@@ -133,7 +133,16 @@ class Fetcher:
                     timeout=timeout or self.default_timeout,
                 )
                 resp.raise_for_status()
+                content_type = resp.headers.get("content-type", "")
+                if "html" in content_type and "json" not in content_type:
+                    raise ValueError(
+                        f"Expected JSON but got HTML from {source} ({url})"
+                    )
                 data = resp.json()
+                if not isinstance(data, (dict, list)):
+                    raise ValueError(
+                        f"Expected dict/list from {source}, got {type(data).__name__}"
+                    )
                 self.breaker.record_success(source)
                 self.cache.set(effective_key, data, cache_ttl)
                 if self.vector_store:
@@ -142,7 +151,7 @@ class Fetcher:
             except (httpx.HTTPStatusError, httpx.RequestError, Exception) as exc:
                 last_error = exc
                 if attempt < self.max_retries:
-                    wait = 1.0 * (attempt + 1)
+                    wait = min(2 ** attempt, 30)
                     logger.debug(
                         "Retry %d/%d for %s (%s), waiting %.1fs",
                         attempt + 1,
@@ -198,7 +207,7 @@ class Fetcher:
             except (httpx.HTTPStatusError, httpx.RequestError, Exception) as exc:
                 last_error = exc
                 if attempt < self.max_retries:
-                    await asyncio.sleep(1.0 * (attempt + 1))
+                    await asyncio.sleep(min(2 ** attempt, 30))
 
         self.breaker.record_failure(source)
         logger.warning("Text fetch failed for %s: %s", source, last_error)

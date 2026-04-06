@@ -47,4 +47,7 @@ packages = ["src/world_intel_mcp"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["src/world_intel_mcp/tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m 'not smoke'"
+markers = [
+    "smoke: live API tests (deselected by default, run with: pytest -m smoke)",
+]
