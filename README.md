@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/marc-shade-world-intel-mcp-badge.png)](https://mseep.ai/app/marc-shade-world-intel-mcp)
+
 ![Phoenix Intelligence Dashboard](docs/dashboard.png)
 
 # World Intelligence MCP Server
