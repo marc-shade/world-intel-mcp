@@ -5,6 +5,33 @@
 Tools 139 -> 160. Collector sources 55 -> 61. New MCP surface: 29 prompts and 3
 resources (none before).
 
+### Fixed: dead upstream endpoints and feeds
+- `intel_airport_delays`: the FAA ASWS host (`soa.smext.faa.gov`) no longer
+  resolves. Delays now come from the FAA NAS Status feed
+  (`nasstatus.faa.gov/api/airport-status-information`), one national list of
+  active ground stops, delay programs and closures. Every airport with an
+  active event is listed, not a fixed set of 20; closures are returned in a
+  separate `closures` list.
+- `intel_internet_outages`: the keyless IODA fallback called a removed route
+  (`/v2/outages/overall`, 404). It now reads `/v2/outages/events`.
+- `intel_usa_spending` agency list: `/api/v2/agency/list/` returns 404; it now
+  reads `/api/v2/references/toptier_agencies/`. A failed fetch returns
+  `error` / `degraded` instead of an empty agency list.
+- `intel_cyber_threats`: abuse.ch requires an Auth-Key for the URLhaus API
+  and has retired the keyless dumps. URLhaus is fetched only when
+  `URLHAUS_AUTH_KEY` is set; without it the feed is skipped and reported.
+- `intel_social_signals`: Reddit answers unauthenticated JSON with 403. When
+  every subreddit fails the tool returns an `error` instead of zero posts.
+- `intel_cable_health`: with NGA MSI down, every corridor read as "clear".
+  The outage shape now carries `error` / `degraded` / `reason`.
+- News: 13 dead RSS URLs replaced (DW x4, CFR, Chatham House, HRW,
+  Eurasianet, Daily Maverick, Maritime Executive, Arms Control Association,
+  Scientific American, White House).
+- CLI: `intel flights` crashed on aircraft whose altitude is the string
+  "ground"; `intel space` printed an empty table (it read keys the source
+  no longer returns); `intel macro` printed `?` for mempool fees and BTC
+  dominance; `intel spending` showed $0.0B obligated (wrong key).
+
 ### Fixed: failed fetches log no credentials
 - A failed keyed request (FRED, EIA, TomTom and others pass the key as a
   query parameter) logged the full request URL, key included. Fetch
