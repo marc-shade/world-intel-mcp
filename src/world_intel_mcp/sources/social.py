@@ -47,6 +47,7 @@ async def fetch_social_signals(
     now = datetime.now(timezone.utc)
 
     all_posts: list[dict] = []
+    failed: list[str] = []
 
     async def _fetch_subreddit(subreddit: str) -> list[dict]:
         url = _REDDIT_HOT_URL.format(subreddit=subreddit)
@@ -60,7 +61,8 @@ async def fetch_social_signals(
         )
 
         if data is None:
-            logger.debug("No data from r/%s", subreddit)
+            logger.warning("No data from r/%s", subreddit)
+            failed.append(subreddit)
             return []
 
         posts: list[dict] = []
@@ -99,6 +101,14 @@ async def fetch_social_signals(
     for posts in results:
         all_posts.extend(posts)
 
+    if len(failed) == len(_SUBREDDITS):
+        return {
+            "error": "Reddit unavailable (every subreddit fetch failed; Reddit blocks unauthenticated JSON)",
+            "source": "reddit-public",
+            "subreddits_failed": failed,
+            "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+
     # Sort by score descending
     all_posts.sort(key=lambda p: p.get("score", 0), reverse=True)
 
@@ -127,6 +137,7 @@ async def fetch_social_signals(
         "posts": all_posts,
         "velocity_metrics": velocity_metrics,
         "subreddits_queried": _SUBREDDITS,
+        "subreddits_failed": failed,
         "source": "reddit-public",
         "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }

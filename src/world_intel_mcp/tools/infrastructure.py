@@ -51,7 +51,7 @@ TOOLS: list[Tool] = [
     # --- Aviation (1 tool) ---
     Tool(
         name="intel_airport_delays",
-        description="Get current US airport delays from FAA (20 major airports). No API key needed.",
+        description="Get current US airport ground stops, delay programs and closures from the FAA NAS Status feed. No API key needed.",
         inputSchema={"type": "object", "properties": {}},
     ),
     # --- Aviation domestic (1 tool) ---

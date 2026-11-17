@@ -821,6 +821,7 @@ The vector store uses FastEmbed (ONNX-based, BAAI/bge-small-en-v1.5) for embeddi
 | `EIA_API_KEY` | No | Energy price data |
 | `CLOUDFLARE_API_TOKEN` | No | Internet outage data |
 | `FRED_API_KEY` | No | Macro economic data (also used for yield curve) |
+| `URLHAUS_AUTH_KEY` | No | URLhaus feed in cyber threats (abuse.ch API requires a free key; skipped without it) |
 | `OPENSKY_CLIENT_ID` | No | Military flight fallback |
 | `OPENSKY_CLIENT_SECRET` | No | Military flight fallback |
 | `OPENSKY_USERNAME` | No | OpenSky account for the aviation tools (with `OPENSKY_PASSWORD`); requests are anonymous without it |

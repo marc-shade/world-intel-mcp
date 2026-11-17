@@ -21,6 +21,11 @@ from world_intel_mcp.sources.cyber import (
     fetch_cyber_threats,
 )
 
+@pytest.fixture(autouse=True)
+def _urlhaus_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("URLHAUS_AUTH_KEY", "test-key")
+
+
 _RECENT = (datetime.now(timezone.utc) - timedelta(days=5)).strftime("%Y-%m-%d")
 
 _FEODO = [
@@ -250,6 +255,29 @@ async def test_fetch_cyber_threats_partial_outage(
     assert result["feeds_successful"] == 1
     assert result["count"] == 2
     assert all(t["source_feed"] == "feodo-tracker" for t in result["threats"])
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_urlhaus_sends_auth_key(fetcher: Fetcher) -> None:
+    _mock_all_feeds()
+    await fetch_cyber_threats(fetcher)
+    call = next(c for c in respx.calls if "urlhaus-api" in str(c.request.url))
+    assert call.request.headers["Auth-Key"] == "test-key"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_urlhaus_without_key_is_failed_not_success(
+    fetcher: Fetcher, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("URLHAUS_AUTH_KEY")
+    _mock_all_feeds()
+    result = await fetch_cyber_threats(fetcher)
+    assert result["feeds_successful"] == 3
+    assert result["feeds_attempted"] == 4
+    assert all(t["source_feed"] != "urlhaus" for t in result["threats"])
+    assert not any("urlhaus-api" in str(c.request.url) for c in respx.calls)
 
 
 def test_normalizers_reject_wrong_shapes() -> None:
