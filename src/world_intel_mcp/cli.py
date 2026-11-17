@@ -223,6 +223,13 @@ def crypto(ctx: click.Context, limit: int) -> None:
     console.print(table)
 
 
+def _num(v: object, fmt: str) -> str:
+    """Format a number; pass strings through (ADS-B altitude is "ground")."""
+    if isinstance(v, str):
+        return v
+    return format(v or 0, fmt)
+
+
 @main.command()
 @click.pass_context
 def macro(ctx: click.Context) -> None:
@@ -245,6 +252,16 @@ def macro(ctx: click.Context) -> None:
         elif isinstance(info, dict):
             val = info.get("value", info.get("price", "?"))
             detail = info.get("classification", info.get("label", ""))
+            if "fastest_fee" in info:
+                val = f"{info['fastest_fee']} sat/vB"
+                detail = (
+                    f"30m {info.get('half_hour_fee', '?')} / "
+                    f"1h {info.get('hour_fee', '?')} / "
+                    f"eco {info.get('economy_fee', '?')}"
+                )
+            elif "btc_dominance_pct" in info:
+                val = f"{info['btc_dominance_pct']}%"
+                detail = "BTC dominance"
             table.add_row(_cell(name), _cell(val), _cell(detail))
         else:
             table.add_row(_cell(name), _cell(info), "")
@@ -550,8 +567,8 @@ def flights(ctx: click.Context, bbox: str | None) -> None:
             _cell(a.get("callsign", "?")),
             _cell(a.get("icao24", "")),
             _cell(a.get("origin_country", "")),
-            f"{a.get('altitude_m') or 0:,.0f}",
-            f"{a.get('velocity_ms') or 0:.0f}",
+            _num(a.get("altitude_m"), ",.0f"),
+            _num(a.get("velocity_ms"), ".0f"),
         )
     console.print(table)
 
@@ -2560,16 +2577,30 @@ def space_cmd(ctx: click.Context) -> None:
     table.add_column("Value", justify="right")
 
     for key in (
-        "k_index",
+        "current_kp",
+        "kp_level",
+        "latest_flare_class",
         "solar_wind_speed_km_s",
-        "solar_wind_density",
-        "bz_gsm_nt",
-        "flux_10_7",
     ):
-        val = data.get(key)
-        if val is not None:
-            table.add_row(key.replace("_", " ").title(), _cell(val))
+        if key in data:
+            val = data[key]
+            table.add_row(
+                key.replace("_", " ").title(), _cell("unknown" if val is None else val)
+            )
     console.print(table)
+    alerts = data.get("alerts") or []
+    if alerts:
+        console.print(f"\n[bold]{len(alerts)} alerts[/bold]")
+        for al in alerts[:5]:
+            lines = [ln for ln in str(al.get("message", "")).splitlines() if ln.strip()]
+            head = next(
+                (ln for ln in lines if ln.startswith(("ALERT", "WATCH", "WARNING", "SUMMARY", "CONTINUED", "EXTENDED"))),
+                lines[0] if lines else "",
+            )
+            console.print(
+                f"  {_cell(str(al.get('issue_datetime', ''))[:16])} "
+                f"{_cell(al.get('product_id', ''))} {_cell(head)}"
+            )
 
 
 @main.command(name="sanctions")
@@ -2738,7 +2769,7 @@ def spending_cmd(ctx: click.Context, limit: int) -> None:
 
     for a in data.get("agencies", []):
         budget = a.get("budget_authority", 0) or 0
-        obligated = a.get("obligated", 0) or 0
+        obligated = a.get("obligated_amount", 0) or 0
         table.add_row(
             _cell(a.get("name", "")),
             f"${budget / 1e9:,.1f}B",

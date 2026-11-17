@@ -171,6 +171,12 @@ KEYED_SOURCES: tuple[KeyedSource, ...] = (
         "Internet outages fall back to the IODA public API.",
     ),
     KeyedSource(
+        "URLhaus",
+        ("URLHAUS_AUTH_KEY",),
+        "intel_cyber_threats skips the URLhaus feed and reports three of four feeds; "
+        "abuse.ch no longer serves it without a key.",
+    ),
+    KeyedSource(
         "OpenSky",
         ("OPENSKY_CLIENT_ID", "OPENSKY_CLIENT_SECRET", "OPENSKY_USERNAME", "OPENSKY_PASSWORD"),
         "Requests are anonymous, with OpenSky's lower anonymous limits.",

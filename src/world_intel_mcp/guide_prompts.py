@@ -979,12 +979,12 @@ PROMPTS: tuple[ResearchPrompt, ...] = (
         domain="aviation",
         question="Which major US airports have delays now, and is severe weather active near them?",
         steps=(
-            ("intel_airport_delays", "FAA delays at 20 major US airports"),
+            ("intel_airport_delays", "FAA ground stops, delay programs and closures at US airports"),
             ("intel_aviation_domestic", "the airborne traffic snapshot for scale"),
             ("intel_weather_alerts", "NWS alerts for the states of the delayed airports"),
         ),
         limits=(
-            "FAA data covers major US airports only.",
+            "FAA data lists only airports with an active event; an absent airport has none reported.",
             "The airborne total is a snapshot of aircraft OpenSky receives, "
             "not a count of all flights.",
         ),

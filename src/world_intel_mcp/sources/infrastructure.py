@@ -152,7 +152,15 @@ def _point_in_corridor(
 # IODA fallback (Georgia Tech Internet Intelligence — public, no auth)
 # ---------------------------------------------------------------------------
 
-_IODA_OUTAGES_URL = "https://api.ioda.inetintel.cc.gatech.edu/v2/outages/overall"
+_IODA_OUTAGES_URL = "https://api.ioda.inetintel.cc.gatech.edu/v2/outages/events"
+_IODA_FETCH_LIMIT = 1000   # a week of country-level events ran to ~150 in Nov 2026
+_IODA_MAX_RETURNED = 50    # newest first; total_7d still counts every event
+
+
+def _epoch_iso(ts: int | None) -> str | None:
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(ts, timezone.utc).isoformat()
 
 
 async def _fetch_ioda_outages(fetcher: Fetcher) -> dict | None:
@@ -174,7 +182,11 @@ async def _fetch_ioda_outages(fetcher: Fetcher) -> dict | None:
         params={
             "from": int(since.timestamp()),
             "until": int(now.timestamp()),
-            "limit": 20,
+            "entityType": "country",
+            "format": "ioda",
+            # IODA returns events oldest first: a small limit would keep
+            # only the start of the window and hide the newest outages.
+            "limit": _IODA_FETCH_LIMIT,
         },
         timeout=15.0,
     )
@@ -182,7 +194,7 @@ async def _fetch_ioda_outages(fetcher: Fetcher) -> dict | None:
     if data is None:
         return None
 
-    # IODA returns {"data": [{"entity": {...}, "events": [...]}]}
+    # IODA returns {"data": [{"entity": {...}, "from": ts, "until": ts, ...}]}
     raw_items = data if isinstance(data, list) else data.get("data", [])
     if not isinstance(raw_items, list):
         return None
@@ -202,24 +214,27 @@ async def _fetch_ioda_outages(fetcher: Fetcher) -> dict | None:
                 continue
             start = ev.get("from") or ev.get("start")
             end = ev.get("until") or ev.get("end")
-            is_ongoing = end is None
+            # Ongoing events are clamped to the query window's end.
+            is_ongoing = end is None or end >= int(now.timestamp()) - 600
 
             if is_ongoing:
                 ongoing_count += 1
 
             outages.append({
                 "id": ev.get("id") or entity.get("code"),
-                "start": start,
-                "end": end,
+                "start": _epoch_iso(start),
+                "end": None if is_ongoing else _epoch_iso(end),
                 "description": ev.get("summary", entity.get("name", "")),
-                "scope": ev.get("level", "unknown"),
+                "scope": ev.get("level", entity.get("type", "unknown")),
                 "countries": [entity.get("code", "")] if entity.get("code") else [],
                 "asns": [],
                 "is_ongoing": is_ongoing,
             })
 
+    outages.sort(key=lambda o: o["start"] or "", reverse=True)
+
     return {
-        "outages": outages,
+        "outages": outages[:_IODA_MAX_RETURNED],
         "ongoing_count": ongoing_count,
         "total_7d": len(outages),
         "source": "ioda-gatech",
@@ -383,7 +398,9 @@ async def fetch_cable_health(fetcher: Fetcher) -> dict:
 
     if data is None:
         logger.warning("NGA MSI broadcast warnings API returned no data")
-        # Return all corridors as clear when data is unavailable
+        # NGA is down: corridor health is unknown, not clear. The zeroed
+        # fields stay for consumers that read them directly; error /
+        # degraded / reason mark the outage, as fetch_nav_warnings does.
         corridors_result = {}
         for name, info in CABLE_CORRIDORS.items():
             corridors_result[name] = {
@@ -398,6 +415,9 @@ async def fetch_cable_health(fetcher: Fetcher) -> dict:
             "cable_related_warnings": 0,
             "source": "nga-msi",
             "timestamp": now_iso,
+            "error": "NGA MSI API unavailable (no live or cached data)",
+            "degraded": True,
+            "reason": "nga_msi_fetch_failed",
         }
 
     # Parse warnings from the response.  The NGA API may return:

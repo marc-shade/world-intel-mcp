@@ -6,11 +6,14 @@ Aggregates threat data from multiple free public feeds:
 - SANS ISC DShield -- top attacking IPs
 - URLhaus (abuse.ch) -- malware distribution URLs
 
-No API keys required.
+No API keys required, except URLhaus: abuse.ch now requires an Auth-Key on
+its API (set URLHAUS_AUTH_KEY); without one that feed is skipped and counted
+as failed in feeds_successful/feeds_attempted.
 """
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone, timedelta
 
 from ..fetcher import Fetcher
@@ -192,6 +195,19 @@ async def fetch_cyber_threats(
         Dict with threats list, counts, breakdowns by type and severity,
         source, and timestamp.
     """
+    urlhaus_key = os.environ.get("URLHAUS_AUTH_KEY")
+
+    async def _urlhaus() -> dict | list | None:
+        if not urlhaus_key:
+            return None
+        return await fetcher.get_json(
+            _URLHAUS_RECENT_URL,
+            source="urlhaus",
+            cache_key="cyber:urlhaus",
+            cache_ttl=900,
+            headers={"Auth-Key": urlhaus_key},
+        )
+
     feodo_data, cisa_data, sans_data, urlhaus_data = await asyncio.gather(
         fetcher.get_json(
             _FEODO_URL,
@@ -211,12 +227,7 @@ async def fetch_cyber_threats(
             cache_key="cyber:sans_isc",
             cache_ttl=1800,
         ),
-        fetcher.get_json(
-            _URLHAUS_RECENT_URL,
-            source="urlhaus",
-            cache_key="cyber:urlhaus",
-            cache_ttl=900,
-        ),
+        _urlhaus(),
     )
 
     # Track which feeds returned data
@@ -244,7 +255,10 @@ async def fetch_cyber_threats(
     if urlhaus_data is not None:
         feeds_successful += 1
     else:
-        logger.warning("URLhaus feed returned no data")
+        logger.warning(
+            "URLhaus feed returned no data%s",
+            "" if urlhaus_key else " (set URLHAUS_AUTH_KEY; abuse.ch API requires a key)",
+        )
 
     # Merge all threats
     all_threats = feodo_items + cisa_items + sans_items + urlhaus_items

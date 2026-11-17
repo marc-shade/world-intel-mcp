@@ -1,5 +1,6 @@
 """Tests for source modules — uses respx to mock HTTP calls."""
 
+import time
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from unittest.mock import patch
@@ -596,6 +597,21 @@ async def test_fetch_social_signals(fetcher: Fetcher) -> None:
     assert result["subreddits_queried"] == ["worldnews", "geopolitics"]
 
 
+@respx.mock
+@pytest.mark.asyncio
+async def test_fetch_social_signals_blocked_is_error(fetcher: Fetcher) -> None:
+    from world_intel_mcp.sources.social import fetch_social_signals
+
+    respx.get(url__regex=r".*reddit\.com.*hot\.json.*").mock(
+        return_value=httpx.Response(403, text="Blocked")
+    )
+
+    result = await fetch_social_signals(fetcher)
+    assert "Reddit unavailable" in result["error"]
+    assert result["subreddits_failed"] == ["worldnews", "geopolitics"]
+    assert "velocity_metrics" not in result
+
+
 # ---------------------------------------------------------------------------
 # Nuclear (USGS near test sites)
 # ---------------------------------------------------------------------------
@@ -648,22 +664,28 @@ async def test_fetch_nuclear_monitor(fetcher: Fetcher) -> None:
 async def test_fetch_internet_outages_ioda_fallback(fetcher: Fetcher) -> None:
     from world_intel_mcp.sources.infrastructure import fetch_internet_outages
 
-    # IODA response shape
+    # IODA /v2/outages/events?format=ioda response shape (trimmed live)
+    now = int(time.time())
     ioda_response = {
+        "type": "outages.events",
+        "error": None,
         "data": [
+            # IODA lists events oldest first; the source must return newest first.
             {
-                "entity": {"code": "US", "name": "United States"},
-                "events": [
-                    {
-                        "id": "out-123",
-                        "from": "2026-02-20T00:00:00Z",
-                        "until": None,
-                        "summary": "BGP outage detected",
-                        "level": "country",
-                    }
-                ],
-            }
-        ]
+                "entity": {"code": "NF", "name": "Norfolk Island", "type": "country"},
+                "from": now - 200000,
+                "until": now - 100000,
+                "score": 25950.3,
+                "datasource": "gtr",
+            },
+            {
+                "entity": {"code": "GI", "name": "Gibraltar", "type": "country"},
+                "from": now - 86400,
+                "until": now,
+                "score": 19687.8,
+                "datasource": "bgp",
+            },
+        ],
     }
 
     # Cloudflare returns 403 (no token)
@@ -681,8 +703,27 @@ async def test_fetch_internet_outages_ioda_fallback(fetcher: Fetcher) -> None:
 
     result = await fetch_internet_outages(fetcher)
     assert result["source"] == "ioda-gatech"
-    assert result["total_7d"] == 1
+    assert result["total_7d"] == 2
     assert result["ongoing_count"] == 1
+    assert result["outages"][0]["countries"] == ["GI"]
+    assert result["outages"][0]["end"] is None
+    assert isinstance(result["outages"][1]["end"], str)
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_fetch_internet_outages_ioda_error(fetcher: Fetcher) -> None:
+    from world_intel_mcp.sources.infrastructure import fetch_internet_outages
+
+    respx.get(url__regex=r".*ioda\.inetintel.*").mock(return_value=httpx.Response(500))
+    import os
+
+    os.environ.pop("CLOUDFLARE_API_TOKEN", None)
+
+    result = await fetch_internet_outages(fetcher)
+    assert result["degraded"] is True
+    assert result["outages"] == []
+    assert "error" in result
 
 
 @respx.mock

@@ -11,7 +11,7 @@ from ..fetcher import Fetcher
 logger = logging.getLogger("world-intel-mcp.sources.usa_spending")
 
 _SPENDING_BASE = "https://api.usaspending.gov/api/v2"
-_SPENDING_OVERVIEW_URL = f"{_SPENDING_BASE}/agency/list/"
+_SPENDING_OVERVIEW_URL = f"{_SPENDING_BASE}/references/toptier_agencies/"
 
 
 def _utc_now_iso() -> str:
@@ -45,7 +45,15 @@ async def fetch_usa_spending(
     )
 
     if data is None or not isinstance(data, dict):
-        return {"agencies": [], "count": 0, "fiscal_year": fiscal_year, "source": "usaspending", "timestamp": _utc_now_iso()}
+        return {
+            "agencies": [],
+            "count": 0,
+            "fiscal_year": fiscal_year,
+            "source": "usaspending",
+            "timestamp": _utc_now_iso(),
+            "error": "USAspending agency fetch failed",
+            "degraded": True,
+        }
 
     agencies = []
     for item in data.get("results", []):

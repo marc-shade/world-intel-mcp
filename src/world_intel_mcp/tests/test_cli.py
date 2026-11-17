@@ -1386,24 +1386,74 @@ def test_elections_passes_country_and_renders_calendar(
     assert "4.5" in result.output
 
 
-def test_space_renders_metrics_and_skips_missing(
+def test_space_renders_metrics_null_as_unknown_and_alerts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     payload = {
-        "k_index": 3.2,
-        "solar_wind_speed_km_s": 450.0,
-        "solar_wind_density": None,
-        "bz_gsm_nt": None,
-        "flux_10_7": 155,
+        "current_kp": 0.67,
+        "kp_level": "Quiet",
+        "latest_flare_class": "B6.5",
+        "solar_wind_speed_km_s": None,
+        "alerts": [
+            {
+                "issue_datetime": "2026-11-16 06:28:16.430",
+                "product_id": "EF3A",
+                "message": "Space Weather Message Code: ALTEF3\r\nSerial Number: 1\r\n"
+                "Issue Time: 2026 Nov 16 0628 UTC\r\n\r\nCONTINUED ALERT: Electron flux",
+            }
+        ],
     }
     monkeypatch.setattr(cli.space_weather, "fetch_space_weather", _fake(payload))
     result = _invoke("space")
     assert result.exit_code == 0
-    assert "K Index" in result.output
-    assert "3.2" in result.output
-    assert "450.0" in result.output
-    assert "155" in result.output
-    assert "Bz" not in result.output  # None metrics are omitted
+    assert "0.67" in result.output
+    assert "Quiet" in result.output
+    assert "B6.5" in result.output
+    assert "unknown" in result.output  # null solar wind
+    assert "1 alerts" in result.output
+    assert "CONTINUED ALERT: Electron flux" in result.output
+
+
+def test_flights_on_ground_string_altitude_does_not_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "count": 2,
+        "aircraft": [
+            {"callsign": "UP1", "icao24": "aaaaaa", "origin_country": "US",
+             "altitude_m": 22000, "velocity_ms": 286.0, "on_ground": False},
+            {"callsign": "DOWN1", "icao24": "bbbbbb", "origin_country": "US",
+             "altitude_m": "ground", "velocity_ms": 0.0, "on_ground": True},
+        ],
+    }
+    monkeypatch.setattr(cli.military, "fetch_military_flights", _fake(payload))
+    result = _invoke("flights")
+    assert result.exit_code == 0
+    assert "22,000" in result.output
+    assert "ground" in result.output
+
+
+def test_macro_renders_mempool_and_btc_dominance_dicts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "signals": {
+            "mempool_fees": {
+                "fastest_fee": 2, "half_hour_fee": 1, "hour_fee": 1,
+                "economy_fee": 1, "minimum_fee": 1, "source": "mempool",
+            },
+            "btc_dominance": {"btc_dominance_pct": 58.56, "source": "coingecko"},
+            "vix": {"price": 22.91},
+        }
+    }
+    monkeypatch.setattr(cli.markets, "fetch_macro_signals", _fake(payload))
+    result = _invoke("macro")
+    assert result.exit_code == 0
+    assert "2 sat/vB" in result.output
+    assert "30m 1 / 1h 1 / eco 1" in result.output
+    assert "58.56%" in result.output
+    assert "22.91" in result.output
+    assert "?" not in result.output
 
 
 def test_sanctions_passes_query_and_entity_type_label_renders(
@@ -1574,7 +1624,7 @@ def test_spending_renders_agency_budgets(monkeypatch: pytest.MonkeyPatch) -> Non
             {
                 "name": "Department of Defense",
                 "budget_authority": 850e9,
-                "obligated": 600e9,
+                "obligated_amount": 600e9,
             }
         ]
     }

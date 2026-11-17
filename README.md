@@ -45,7 +45,7 @@ For research, the collector keeps a dated history of what it captures. Each obse
 | **Strategic Synthesis** | 4 | Strategic posture, world brief, fleet report, population exposure |
 | **Geospatial** | 11 | Military bases, ports, pipelines, nuclear facilities, cables, datacenters, spaceports, minerals, exchanges, trade routes, cloud regions |
 | **AI & Technology** | 4 | arXiv papers, HuggingFace models, Hacker News, GitHub trending |
-| **Cyber Threats** | 1 | URLhaus, Feodotracker, CISA KEV, SANS |
+| **Cyber Threats** | 1 | Feodotracker, CISA KEV, SANS; URLhaus with `URLHAUS_AUTH_KEY` |
 | **Health** | 1 | WHO DON, ProMED, CIDRAP disease outbreaks |
 | **Space Weather** | 1 | NOAA SWPC (Kp index, solar flares, alerts) |
 | **Social & Sanctions** | 3 | Reddit velocity, OFAC SDN list, nuclear test site monitoring |
@@ -520,7 +520,7 @@ different, openly licensed data source; no ews code is used.
 ### Social & Sanctions (3)
 | Tool | Description |
 |------|-------------|
-| `intel_social_signals` | Reddit geopolitical discussion velocity |
+| `intel_social_signals` | Reddit geopolitical discussion velocity (Reddit currently answers unauthenticated requests with 403; the tool then returns an error) |
 | `intel_sanctions_search` | OFAC SDN list search |
 | `intel_nuclear_monitor` | Seismic monitoring near nuclear test sites |
 
@@ -821,6 +821,7 @@ The vector store uses FastEmbed (ONNX-based, BAAI/bge-small-en-v1.5) for embeddi
 | `EIA_API_KEY` | No | Energy price data |
 | `CLOUDFLARE_API_TOKEN` | No | Internet outage data |
 | `FRED_API_KEY` | No | Macro economic data (also used for yield curve) |
+| `URLHAUS_AUTH_KEY` | No | URLhaus feed in cyber threats (abuse.ch API requires a free key; skipped without it) |
 | `OPENSKY_CLIENT_ID` | No | Military flight fallback |
 | `OPENSKY_CLIENT_SECRET` | No | Military flight fallback |
 | `OPENSKY_USERNAME` | No | OpenSky account for the aviation tools (with `OPENSKY_PASSWORD`); requests are anonymous without it |

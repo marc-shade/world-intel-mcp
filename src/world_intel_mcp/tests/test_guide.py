@@ -1153,6 +1153,8 @@ async def test_prompt_failure_warnings_match_the_code(monkeypatch) -> None:
     cables = await infrastructure.fetch_cable_health(_DownFetcher())
     assert {c["status_label"] for c in cables["corridors"].values()} == {"clear"}
     assert cables["warnings_total"] == 0
+    assert cables["degraded"] is True and cables["reason"] == "nga_msi_fetch_failed"
+    assert "unavailable" in cables["error"]
 
     # sanctions-screen: a failed download is zero entities; aliases are not
     # searched; results stop at the limit.
@@ -2081,12 +2083,11 @@ def test_history_recall_ten_years_is_the_argument_maximum() -> None:
 
 def test_prompt_counts_match_their_tables() -> None:
     from world_intel_mcp.config.countries import INTEL_HOTSPOTS
-    from world_intel_mcp.sources import aviation, bonds, central_banks
+    from world_intel_mcp.sources import bonds, central_banks
 
     banks = len(central_banks._CURATED_RATES) + len(central_banks._FRED_RATE_SERIES)
     assert f"rates for {banks} central banks" in _text("central-bank-compare")
     assert f"the {len(INTEL_HOTSPOTS)} hotspots" in _text("hotspot-escalation")
-    assert f"FAA delays at {len(aviation._MAJOR_AIRPORTS)} major US airports" in _text("airport-disruption")
     maturities = list(bonds._YAHOO_YIELD_SYMBOLS.values())
     words = {3: "three", 4: "four", 5: "five"}
     flat = " ".join(_text("yield-curve-check").split())

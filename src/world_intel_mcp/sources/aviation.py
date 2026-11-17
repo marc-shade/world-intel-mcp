@@ -1,15 +1,14 @@
 """Aviation data sources for world-intel-mcp.
 
-Provides real-time US airport delay information from the FAA Airport
-Status Web Service (ASWS) API, and global domestic air traffic counts
-from OpenSky Network.  No API key required for either.
+Provides real-time US airport delay information from the FAA NAS Status
+feed, and global domestic air traffic counts from OpenSky Network.  No API key required for either.
 """
 
-import asyncio
 import base64
 import logging
 import os
 from datetime import datetime, timezone
+from xml.etree import ElementTree as ET
 
 from ..fetcher import Fetcher
 
@@ -19,12 +18,7 @@ logger = logging.getLogger("world-intel-mcp.sources.aviation")
 # Constants
 # ---------------------------------------------------------------------------
 
-_FAA_STATUS_URL = "https://soa.smext.faa.gov/asws/api/airport/status"
-
-_MAJOR_AIRPORTS = [
-    "ATL", "LAX", "ORD", "DFW", "DEN", "JFK", "SFO", "SEA", "LAS", "MCO",
-    "EWR", "CLT", "PHX", "IAH", "MIA", "BOS", "MSP", "FLL", "DTW", "PHL",
-]
+_FAA_STATUS_URL = "https://nasstatus.faa.gov/api/airport-status-information"
 
 
 # ---------------------------------------------------------------------------
@@ -35,37 +29,45 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _parse_airport_status(code: str, data: dict) -> dict:
-    """Extract structured fields from a single FAA airport status response."""
-    name = data.get("Name", code)
-    delay = data.get("Delay", False)
+def _parse_events(root: ET.Element) -> tuple[list[dict], list[dict]]:
+    """Group the FAA national event list by airport.
 
-    # Normalize delay to boolean (API may return string "true"/"false")
-    if isinstance(delay, str):
-        delay = delay.lower() == "true"
+    Returns (delayed, closures). Closures are NOTAM-based and often only
+    restrict general aviation, so they are not counted as delays.
+    """
+    delayed: dict[str, dict] = {}
+    closures: list[dict] = []
 
-    status_items = data.get("Status", [])
-    if not isinstance(status_items, list):
-        status_items = [status_items] if isinstance(status_items, dict) else []
+    for delay_type in root.iter("Delay_type"):
+        type_name = (delay_type.findtext("Name") or "").strip()
+        for item in delay_type.iter():
+            code = (item.findtext("ARPT") or "").strip()
+            if not code:
+                continue
+            reason = (item.findtext("Reason") or "").strip()
+            if "Closure" in type_name:
+                closures.append({
+                    "code": code,
+                    "reason": reason,
+                    "closure_begin": (item.findtext("Start") or "").strip(),
+                    "closure_end": (item.findtext("Reopen") or "").strip(),
+                })
+                continue
+            avg = (item.findtext("Avg") or "").strip()
+            if not avg and item.findtext("End_Time"):
+                avg = f"until {item.findtext('End_Time').strip()}"
+            entry = delayed.setdefault(
+                code, {"code": code, "name": code, "delay": True, "status": []}
+            )
+            entry["status"].append({
+                "type": type_name,
+                "reason": reason,
+                "avg_delay": avg,
+                "closure_begin": "",
+                "closure_end": "",
+            })
 
-    parsed_statuses = []
-    for item in status_items:
-        if not isinstance(item, dict):
-            continue
-        parsed_statuses.append({
-            "type": item.get("Type", ""),
-            "reason": item.get("Reason", ""),
-            "avg_delay": item.get("AvgDelay", ""),
-            "closure_begin": item.get("ClosureBegin", ""),
-            "closure_end": item.get("ClosureEnd", ""),
-        })
-
-    return {
-        "code": code,
-        "name": name,
-        "delay": delay,
-        "status": parsed_statuses,
-    }
+    return list(delayed.values()), closures
 
 
 # ---------------------------------------------------------------------------
@@ -73,10 +75,10 @@ def _parse_airport_status(code: str, data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 async def fetch_airport_delays(fetcher: Fetcher) -> dict:
-    """Fetch current US airport delays from the FAA Airport Status API.
+    """Fetch current US airport delays from the FAA NAS Status feed.
 
-    Queries the FAA ASWS API for each major US airport in parallel and
-    returns a summary of which airports currently have active delays.
+    One national XML list of active ground stops, ground delay programs,
+    arrival/departure delays and closures; grouped here by airport.
 
     Args:
         fetcher: Shared HTTP fetcher with caching and circuit breaking.
@@ -84,53 +86,33 @@ async def fetch_airport_delays(fetcher: Fetcher) -> dict:
     Returns:
         Dict with delayed airports list, counts, source, and timestamp.
     """
-
-    async def _fetch_one(code: str) -> tuple[str, dict | None]:
-        """Fetch status for a single airport, returning (code, data|None)."""
-        data = await fetcher.get_json(
-            url=f"{_FAA_STATUS_URL}/{code}",
-            source="faa",
-            cache_key=f"aviation:faa:{code}",
-            cache_ttl=300,
-        )
-        return code, data
-
-    # Fetch all airports in parallel
-    results = await asyncio.gather(
-        *[_fetch_one(code) for code in _MAJOR_AIRPORTS],
-        return_exceptions=True,
-    )
-
     now_iso = _utc_now_iso()
+    xml_text = await fetcher.get_xml(
+        _FAA_STATUS_URL,
+        source="faa",
+        cache_key="aviation:faa:status",
+        cache_ttl=300,
+    )
+    if xml_text is None:
+        return {"error": "FAA NAS Status API unavailable", "source": "faa", "timestamp": now_iso}
 
-    delayed: list[dict] = []
-    all_airports: list[dict] = []
-    errors = 0
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        logger.warning("FAA NAS Status returned unparseable XML: %s", exc)
+        return {"error": "FAA NAS Status returned invalid XML", "source": "faa", "timestamp": now_iso}
+    if root.tag != "AIRPORT_STATUS_INFORMATION":
+        return {"error": "FAA NAS Status returned unexpected XML", "source": "faa", "timestamp": now_iso}
 
-    for result in results:
-        if isinstance(result, Exception):
-            logger.warning("Exception fetching airport status: %s", result)
-            errors += 1
-            continue
-
-        code, data = result
-
-        if data is None:
-            logger.debug("No data returned for airport %s", code)
-            errors += 1
-            continue
-
-        parsed = _parse_airport_status(code, data)
-        all_airports.append(parsed)
-
-        if parsed["delay"]:
-            delayed.append(parsed)
+    delayed, closures = _parse_events(root)
 
     return {
         "delayed": delayed,
         "delayed_count": len(delayed),
-        "total_checked": len(_MAJOR_AIRPORTS),
-        "errors": errors,
+        # The feed lists every US airport with an active event, not a fixed set.
+        "total_checked": len(delayed),
+        "closures": closures,
+        "errors": 0,
         "source": "faa",
         "timestamp": now_iso,
     }
