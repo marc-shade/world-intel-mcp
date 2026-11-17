@@ -670,19 +670,20 @@ async def test_fetch_internet_outages_ioda_fallback(fetcher: Fetcher) -> None:
         "type": "outages.events",
         "error": None,
         "data": [
-            {
-                "entity": {"code": "GI", "name": "Gibraltar", "type": "country"},
-                "from": now - 86400,
-                "until": now,
-                "score": 19687.8,
-                "datasource": "bgp",
-            },
+            # IODA lists events oldest first; the source must return newest first.
             {
                 "entity": {"code": "NF", "name": "Norfolk Island", "type": "country"},
                 "from": now - 200000,
                 "until": now - 100000,
                 "score": 25950.3,
                 "datasource": "gtr",
+            },
+            {
+                "entity": {"code": "GI", "name": "Gibraltar", "type": "country"},
+                "from": now - 86400,
+                "until": now,
+                "score": 19687.8,
+                "datasource": "bgp",
             },
         ],
     }

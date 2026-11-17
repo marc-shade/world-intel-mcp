@@ -1153,6 +1153,8 @@ async def test_prompt_failure_warnings_match_the_code(monkeypatch) -> None:
     cables = await infrastructure.fetch_cable_health(_DownFetcher())
     assert {c["status_label"] for c in cables["corridors"].values()} == {"clear"}
     assert cables["warnings_total"] == 0
+    assert cables["degraded"] is True and cables["reason"] == "nga_msi_fetch_failed"
+    assert "unavailable" in cables["error"]
 
     # sanctions-screen: a failed download is zero entities; aliases are not
     # searched; results stop at the limit.

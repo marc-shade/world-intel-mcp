@@ -153,6 +153,8 @@ def _point_in_corridor(
 # ---------------------------------------------------------------------------
 
 _IODA_OUTAGES_URL = "https://api.ioda.inetintel.cc.gatech.edu/v2/outages/events"
+_IODA_FETCH_LIMIT = 1000   # a week of country-level events ran to ~150 in Nov 2026
+_IODA_MAX_RETURNED = 50    # newest first; total_7d still counts every event
 
 
 def _epoch_iso(ts: int | None) -> str | None:
@@ -182,7 +184,9 @@ async def _fetch_ioda_outages(fetcher: Fetcher) -> dict | None:
             "until": int(now.timestamp()),
             "entityType": "country",
             "format": "ioda",
-            "limit": 20,
+            # IODA returns events oldest first: a small limit would keep
+            # only the start of the window and hide the newest outages.
+            "limit": _IODA_FETCH_LIMIT,
         },
         timeout=15.0,
     )
@@ -227,8 +231,10 @@ async def _fetch_ioda_outages(fetcher: Fetcher) -> dict | None:
                 "is_ongoing": is_ongoing,
             })
 
+    outages.sort(key=lambda o: o["start"] or "", reverse=True)
+
     return {
-        "outages": outages,
+        "outages": outages[:_IODA_MAX_RETURNED],
         "ongoing_count": ongoing_count,
         "total_7d": len(outages),
         "source": "ioda-gatech",

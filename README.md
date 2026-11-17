@@ -45,7 +45,7 @@ For research, the collector keeps a dated history of what it captures. Each obse
 | **Strategic Synthesis** | 4 | Strategic posture, world brief, fleet report, population exposure |
 | **Geospatial** | 11 | Military bases, ports, pipelines, nuclear facilities, cables, datacenters, spaceports, minerals, exchanges, trade routes, cloud regions |
 | **AI & Technology** | 4 | arXiv papers, HuggingFace models, Hacker News, GitHub trending |
-| **Cyber Threats** | 1 | URLhaus, Feodotracker, CISA KEV, SANS |
+| **Cyber Threats** | 1 | Feodotracker, CISA KEV, SANS; URLhaus with `URLHAUS_AUTH_KEY` |
 | **Health** | 1 | WHO DON, ProMED, CIDRAP disease outbreaks |
 | **Space Weather** | 1 | NOAA SWPC (Kp index, solar flares, alerts) |
 | **Social & Sanctions** | 3 | Reddit velocity, OFAC SDN list, nuclear test site monitoring |
@@ -520,7 +520,7 @@ different, openly licensed data source; no ews code is used.
 ### Social & Sanctions (3)
 | Tool | Description |
 |------|-------------|
-| `intel_social_signals` | Reddit geopolitical discussion velocity |
+| `intel_social_signals` | Reddit geopolitical discussion velocity (Reddit currently answers unauthenticated requests with 403; the tool then returns an error) |
 | `intel_sanctions_search` | OFAC SDN list search |
 | `intel_nuclear_monitor` | Seismic monitoring near nuclear test sites |
 
