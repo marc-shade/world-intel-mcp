@@ -2577,7 +2577,7 @@ def space_cmd(ctx: click.Context) -> None:
 @click.option("--country", "-c", default=None, help="Country filter")
 @click.pass_context
 def sanctions_cmd(ctx: click.Context, query: str, country: str | None) -> None:
-    """Search OFAC SDN sanctions list."""
+    """Search the US sanctions and restricted-party lists (SDN, CSL, 1260H, 889, FCC, UFLPA)."""
     f = _get_fetcher()
     data = _run(sanctions.fetch_sanctions_search(f, query=query, country=country))
 

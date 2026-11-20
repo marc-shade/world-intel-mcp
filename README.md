@@ -48,7 +48,7 @@ For research, the collector keeps a dated history of what it captures. Each obse
 | **Cyber Threats** | 1 | URLhaus, Feodotracker, CISA KEV, SANS |
 | **Health** | 1 | WHO DON, ProMED, CIDRAP disease outbreaks |
 | **Space Weather** | 1 | NOAA SWPC (Kp index, solar flares, alerts) |
-| **Social & Sanctions** | 3 | Reddit velocity, OFAC SDN list, nuclear test site monitoring |
+| **Social & Sanctions** | 3 | Reddit velocity, US sanctions and restricted-party lists (OFAC SDN, CSL, 1260H, 889, FCC Covered List, UFLPA), nuclear test site monitoring |
 | **Country Intelligence** | 3 | Country brief, country stocks, financial centers |
 | **Prediction Markets** | 4 | Polymarket and Kalshi event contracts, the same event on both venues side by side with a stated match confidence, and settled markets scored against their earlier prices (Brier) |
 | **Elections** | 1 | Global election calendar with risk scoring |
@@ -521,7 +521,7 @@ different, openly licensed data source; no ews code is used.
 | Tool | Description |
 |------|-------------|
 | `intel_social_signals` | Reddit geopolitical discussion velocity |
-| `intel_sanctions_search` | OFAC SDN list search |
+| `intel_sanctions_search` | US sanctions and restricted-party search: OFAC SDN, trade.gov CSL (BIS Entity List, MEU, UVL, non-SDN), DoD 1260H, Section 889, FCC Covered List, UFLPA |
 | `intel_nuclear_monitor` | Seismic monitoring near nuclear test sites |
 
 ### Shipping & Trade (1)

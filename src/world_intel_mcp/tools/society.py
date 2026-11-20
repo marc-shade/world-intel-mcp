@@ -310,7 +310,7 @@ TOOLS: list[Tool] = [
     # --- Sanctions (1 tool) ---
     Tool(
         name="intel_sanctions_search",
-        description="Search the US Treasury OFAC Specially Designated Nationals (SDN) sanctions list. Substring match on name, country, program.",
+        description="Search the US sanctions and restricted-party lists: OFAC SDN, the trade.gov Consolidated Screening List (BIS Entity List, MEU, UVL, Denied Persons, ITAR debarred, OFAC non-SDN), DoD 1260H, Section 889, the FCC Covered List and the UFLPA Entity List. Substring match on name, country, program. Each match names its list; lists_unavailable names any list that could not be read.",
         inputSchema={
             "type": "object",
             "properties": {
