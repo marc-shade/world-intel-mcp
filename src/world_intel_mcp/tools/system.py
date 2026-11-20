@@ -60,7 +60,7 @@ async def _status(arguments: dict[str, Any]) -> Any:
             "prediction": ["polymarket", "kalshi"],
             "displacement": ["unhcr"],
             "aviation": ["faa"],
-            "cyber": ["feodo-tracker", "cisa-kev", "sans-dshield", "urlhaus"],
+            "cyber": ["feodo-tracker", "cisa-kev", "sans-dshield", "netapi-honeypot"],
             "space_weather": ["noaa-swpc"],
             "ai_watch": ["arxiv", "huggingface", "ai-news-rss"],
             "health": ["who-don", "cdc", "outbreak-news"],

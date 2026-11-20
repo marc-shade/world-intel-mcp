@@ -181,7 +181,7 @@ TOOLS: list[Tool] = [
     # --- Cyber (1 tool) ---
     Tool(
         name="intel_cyber_threats",
-        description="Get aggregated cyber threat intelligence from 4 feeds (Feodo, CISA KEV, SANS, URLhaus). No API key needed.",
+        description="Get aggregated cyber threat intelligence from 4 feeds (Feodo, CISA KEV, SANS, NetAPI honeypot). No API key needed.",
         inputSchema={
             "type": "object",
             "properties": {

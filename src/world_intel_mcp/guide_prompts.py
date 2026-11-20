@@ -1000,7 +1000,7 @@ PROMPTS: tuple[ResearchPrompt, ...] = (
             "and which threat actors are in the headlines?"
         ),
         steps=(
-            ("intel_cyber_threats", "Feodo, CISA KEV, SANS and URLhaus indicators"),
+            ("intel_cyber_threats", "Feodo, CISA KEV, SANS and NetAPI honeypot indicators"),
             ("intel_keyword_spikes", "CVE and APT names rising in headlines against baseline"),
             ("intel_extract_entities", "CVEs, APT groups and organizations in recent headlines"),
         ),

@@ -45,7 +45,7 @@ For research, the collector keeps a dated history of what it captures. Each obse
 | **Strategic Synthesis** | 4 | Strategic posture, world brief, fleet report, population exposure |
 | **Geospatial** | 11 | Military bases, ports, pipelines, nuclear facilities, cables, datacenters, spaceports, minerals, exchanges, trade routes, cloud regions |
 | **AI & Technology** | 4 | arXiv papers, HuggingFace models, Hacker News, GitHub trending |
-| **Cyber Threats** | 1 | URLhaus, Feodotracker, CISA KEV, SANS |
+| **Cyber Threats** | 1 | Feodotracker, CISA KEV, SANS, NetAPI honeypot |
 | **Health** | 1 | WHO DON, ProMED, CIDRAP disease outbreaks |
 | **Space Weather** | 1 | NOAA SWPC (Kp index, solar flares, alerts) |
 | **Social & Sanctions** | 3 | Reddit velocity, OFAC SDN list, nuclear test site monitoring |
@@ -497,7 +497,7 @@ different, openly licensed data source; no ews code is used.
 ### Cyber Threats (1)
 | Tool | Description |
 |------|-------------|
-| `intel_cyber_threats` | Aggregated cyber intel (URLhaus, CISA KEV, SANS) |
+| `intel_cyber_threats` | Aggregated cyber intel (Feodo, CISA KEV, SANS, NetAPI honeypot) |
 
 ### Space Weather (1)
 | Tool | Description |
@@ -803,7 +803,7 @@ scripts/collector-daemon.sh render   # print the filled-in plist without install
 Once data accumulates, AI agents can query across all domains:
 
 - *"military activity near Taiwan strait"* — finds military flights, naval warnings, theater posture data
-- *"cyber threats targeting healthcare"* — finds URLhaus, CISA KEV entries related to healthcare
+- *"cyber threats targeting healthcare"* — finds CISA KEV entries related to healthcare
 - *"economic indicators suggesting recession"* — finds yield curve inversions, macro signals, FRED data
 
 The vector store uses FastEmbed (ONNX-based, BAAI/bge-small-en-v1.5) for embeddings — no GPU required, ~3 second cold start.
