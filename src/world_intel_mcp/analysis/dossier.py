@@ -210,7 +210,10 @@ async def fetch_country_dossier(
         _safe(fetch_election_calendar(fetcher, country=iso3), "elections"),
         _safe(
             fetch_sanctions_search(
-                fetcher, country=_sanctions_country_name(iso3), limit=_SANCTIONS_LIMIT + 1
+                fetcher,
+                country=_sanctions_country_name(iso3),
+                limit=_SANCTIONS_LIMIT + 1,
+                us_lists=False,
             ),
             "sanctions",
         ),
