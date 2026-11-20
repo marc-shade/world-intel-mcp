@@ -151,16 +151,24 @@ def _normalize_sans_isc(data: list | None) -> list[dict]:
     return items
 
 
-def _normalize_netapi(text: str | None) -> list[dict]:
-    """Normalize the NetAPI honeypot IP list (CSV), most recently active first."""
+def _normalize_netapi(text: str | None) -> list[dict] | None:
+    """Normalize the NetAPI honeypot IP list (CSV), most recently active first.
+
+    Returns None when the body is not the expected CSV (no ``ip`` column, an
+    HTML page, a field the csv module refuses), so the caller can count the
+    feed as failed. A valid CSV without rows gives an empty list.
+    """
     if not text or not isinstance(text, str):
-        return []
+        return None
 
-    reader = csv.DictReader(io.StringIO(text))
-    if not reader.fieldnames or "ip" not in reader.fieldnames:
-        return []
-
-    rows = [row for row in reader if (row.get("ip") or "").strip()]
+    try:
+        reader = csv.DictReader(io.StringIO(text))
+        if not reader.fieldnames or "ip" not in reader.fieldnames:
+            return None
+        rows = [row for row in reader if (row.get("ip") or "").strip()]
+    except csv.Error as exc:
+        logger.warning("NetAPI honeypot feed is not valid CSV: %s", exc)
+        return None
     rows.sort(key=lambda r: r.get("last_seen") or "", reverse=True)
 
     items: list[dict] = []
@@ -264,10 +272,13 @@ async def fetch_cyber_threats(
         logger.warning("SANS ISC DShield feed returned no data")
 
     netapi_items = _normalize_netapi(netapi_text)
-    if netapi_text is not None:
+    if netapi_items is not None:
         feeds_successful += 1
-    else:
+    elif netapi_text is None:
         logger.warning("NetAPI honeypot feed returned no data")
+    else:
+        logger.warning("NetAPI honeypot feed returned a body that is not the expected CSV")
+    netapi_items = netapi_items or []
 
     # Merge all threats
     all_threats = feodo_items + cisa_items + sans_items + netapi_items

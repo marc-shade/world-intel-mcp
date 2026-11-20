@@ -93,7 +93,7 @@ DOMAIN_CATEGORIES = {
     "sans-dshield": "Cyber Threats",
     "feodo-tracker": "Cyber Threats",
     "cisa-kev": "Cyber Threats",
-    "urlhaus": "Cyber Threats",
+    "netapi-honeypot": "Cyber Threats",
     "alternative-me": "Financial Markets",
     "mempool": "Cryptocurrency",
     "hexdb": "Military & Defense",

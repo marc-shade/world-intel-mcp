@@ -6,6 +6,7 @@ boundary-exact date; circuit-breaker interaction is not exercised here.
 """
 
 import asyncio as asyncio_mod
+import csv
 from datetime import datetime, timezone, timedelta
 
 import httpx
@@ -270,10 +271,45 @@ def test_normalizers_reject_wrong_shapes() -> None:
     assert _normalize_cisa_kev([1, 2]) == []
     assert _normalize_sans_isc(None) == []
     assert _normalize_sans_isc({}) == []
-    assert _normalize_netapi(None) == []
-    assert _normalize_netapi("") == []
-    assert _normalize_netapi("<html><body>502 Bad Gateway</body></html>") == []
-    assert _normalize_netapi("address,last_seen\n203.0.113.10,x\n") == []
+    assert _normalize_netapi(None) is None
+    assert _normalize_netapi("") is None
+    assert _normalize_netapi("<html><body>502 Bad Gateway</body></html>") is None
+    assert _normalize_netapi("address,last_seen\n203.0.113.10,x\n") is None
+    # a valid list without rows is not a failure
+    assert _normalize_netapi(_NETAPI_HEADER) == []
+
+
+def test_normalize_netapi_contains_csv_errors() -> None:
+    """A field larger than csv.field_size_limit() raises csv.Error inside the
+    reader. The feed is then rejected instead of the error escaping."""
+    huge = "x" * (csv.field_size_limit() + 10)
+    assert _normalize_netapi(_NETAPI_HEADER + f"203.0.113.10,{huge}\n") is None
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_rejected_netapi_body_is_not_counted_as_a_feed(
+    fetcher: Fetcher, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An HTML page with status 200 is cached like a list, but it must not
+    raise the healthy-feed count."""
+    async def _no_sleep(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio_mod, "sleep", _no_sleep)
+
+    respx.get(url__regex=r".*feodotracker\.abuse\.ch.*").mock(
+        return_value=httpx.Response(200, json=_FEODO)
+    )
+    respx.get(url__regex=r".*cisa\.gov.*").mock(return_value=httpx.Response(500))
+    respx.get(url__regex=r".*isc\.sans\.edu.*").mock(return_value=httpx.Response(500))
+    respx.get(url__regex=r".*netapi\.com.*").mock(
+        return_value=httpx.Response(200, text="<html><body>maintenance</body></html>")
+    )
+
+    result = await fetch_cyber_threats(fetcher)
+    assert result["feeds_successful"] == 1
+    assert all(t["source_feed"] == "feodo-tracker" for t in result["threats"])
 
 
 def test_normalize_netapi_keeps_the_most_recent_addresses() -> None:
