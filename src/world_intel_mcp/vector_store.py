@@ -93,7 +93,9 @@ DOMAIN_CATEGORIES = {
     "sans-dshield": "Cyber Threats",
     "feodo-tracker": "Cyber Threats",
     "cisa-kev": "Cyber Threats",
-    "urlhaus": "Cyber Threats",
+    "netapi-honeypot": "Cyber Threats",
+    # Collector source name of the combined cyber payload (collector.py SOURCES)
+    "cyber_threats": "Cyber Threats",
     "alternative-me": "Financial Markets",
     "mempool": "Cryptocurrency",
     "hexdb": "Military & Defense",

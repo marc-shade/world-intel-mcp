@@ -6,6 +6,7 @@ boundary-exact date; circuit-breaker interaction is not exercised here.
 """
 
 import asyncio as asyncio_mod
+import csv
 from datetime import datetime, timezone, timedelta
 
 import httpx
@@ -15,9 +16,10 @@ import respx
 from world_intel_mcp.fetcher import Fetcher
 from world_intel_mcp.sources.cyber import (
     _normalize_cisa_kev,
+    _NETAPI_MAX_ITEMS,
     _normalize_feodo,
+    _normalize_netapi,
     _normalize_sans_isc,
-    _normalize_urlhaus,
     fetch_cyber_threats,
 )
 
@@ -90,24 +92,18 @@ _SANS = [
     {"ip": "", "attacks": 5},  # no IP — skipped
 ]
 
-_URLHAUS = {
-    "urls": [
-        {
-            "url": "http://evil.example/mal.exe",
-            "threat": "malware_download",
-            "url_status": "online",
-            "dateadded": "2026-08-30",
-            "tags": ["exe"],
-            "reporter": "abuse_ch",
-        },
-        {
-            "url": "http://old.example/gone.exe",
-            "threat": "malware_download",
-            "url_status": "offline",
-            "dateadded": "2026-08-01",
-        },
-    ]
-}
+_NETAPI_HEADER = (
+    "ip,first_seen,last_seen,category,top_threat,threats,country,asn,as_name,sensors\n"
+)
+
+_NETAPI_CSV = (
+    _NETAPI_HEADER
+    + "203.0.113.10,2026-08-29T10:00:00Z,2026-08-30T12:00:00Z,B,ssh-bruteforce,"
+    + 'ssh-bruteforce|shell-recon,DE,64501,"EXAMPLE-AS, Inc.",3\n'
+    + "198.51.100.7,2026-08-02T08:00:00Z,2026-08-28T09:30:00Z,D,form-spam,"
+    + "form-spam,,,,1\n"
+    + ",,,,,,,,,\n"  # no IP — skipped
+)
 
 
 def _mock_all_feeds() -> None:
@@ -120,8 +116,8 @@ def _mock_all_feeds() -> None:
     respx.get(url__regex=r".*isc\.sans\.edu.*").mock(
         return_value=httpx.Response(200, json=_SANS)
     )
-    respx.get(url__regex=r".*urlhaus-api\.abuse\.ch.*").mock(
-        return_value=httpx.Response(200, json=_URLHAUS)
+    respx.get(url__regex=r".*netapi\.com.*").mock(
+        return_value=httpx.Response(200, text=_NETAPI_CSV)
     )
 
 
@@ -135,7 +131,7 @@ async def test_fetch_cyber_threats_aggregates_all_feeds(fetcher: Fetcher) -> Non
     assert result["source"] == "cyber-feeds"
     assert result["feeds_attempted"] == 4
     assert result["feeds_successful"] == 4
-    # 2 feodo + 2 KEV (old one cut) + 1 SANS (empty-IP skipped) + 2 urlhaus
+    # 2 feodo + 2 KEV (old one cut) + 1 SANS (empty-IP skipped) + 2 netapi
     assert result["count"] == 7
 
     # Severity ordering: criticals first, then high, medium, low.
@@ -147,7 +143,7 @@ async def test_fetch_cyber_threats_aggregates_all_feeds(fetcher: Fetcher) -> Non
         "high",
         "high",
         "medium",
-        "low",
+        "medium",
     ]
 
     # Within criticals, newest first_seen first (KEV added 5 days ago beats
@@ -162,10 +158,9 @@ async def test_fetch_cyber_threats_aggregates_all_feeds(fetcher: Fetcher) -> Non
     assert result["by_type"] == {
         "c2_ip": 2,
         "vulnerability": 2,
-        "attack_ip": 1,
-        "malware_url": 2,
+        "attack_ip": 3,
     }
-    assert result["by_severity"] == {"critical": 2, "high": 3, "medium": 1, "low": 1}
+    assert result["by_severity"] == {"critical": 2, "high": 3, "medium": 2}
 
     # Field contract on one item per feed.
     feodo = next(t for t in result["threats"] if t["indicator"] == "1.2.3.4")
@@ -183,14 +178,33 @@ async def test_fetch_cyber_threats_aggregates_all_feeds(fetcher: Fetcher) -> Non
     assert sans["threat"] == "DShield top attacker (1234 attacks)"
     assert sans["details"]["as_country"] == "CN"
 
-    urlh = next(
-        t for t in result["threats"] if t["indicator"] == "http://evil.example/mal.exe"
-    )
-    assert urlh["severity"] == "high"  # online
-    offline = next(
-        t for t in result["threats"] if t["indicator"] == "http://old.example/gone.exe"
-    )
-    assert offline["severity"] == "low"
+    netapi = next(t for t in result["threats"] if t["indicator"] == "203.0.113.10")
+    assert netapi["type"] == "attack_ip"
+    assert netapi["severity"] == "high"
+    assert netapi["source_feed"] == "netapi-honeypot"
+    assert netapi["threat"] == "Honeypot attacker (ssh-bruteforce)"
+    assert netapi["first_seen"] == "2026-08-29T10:00:00Z"
+    assert netapi["details"] == {
+        "category": "B",
+        "threats": ["ssh-bruteforce", "shell-recon"],
+        "last_seen": "2026-08-30T12:00:00Z",
+        "country": "DE",
+        "as_number": 64501,
+        "as_name": "EXAMPLE-AS, Inc.",
+        "sensors": 3,
+    }
+    spam = next(t for t in result["threats"] if t["indicator"] == "198.51.100.7")
+    assert spam["severity"] == "medium"  # category D, form spam
+    assert spam["details"]["country"] is None
+    assert spam["details"]["as_number"] is None
+
+    # High items: KEV added 5 days ago, then the NetAPI address first seen
+    # 2026-08-29, then the SANS entry first seen 2026-08-20.
+    assert [t["indicator"] for t in result["threats"][2:5]] == [
+        "CVE-2026-0002",
+        "203.0.113.10",
+        "9.9.9.9",
+    ]
 
 
 @respx.mock
@@ -242,9 +256,7 @@ async def test_fetch_cyber_threats_partial_outage(
     )
     respx.get(url__regex=r".*cisa\.gov.*").mock(return_value=httpx.Response(500))
     respx.get(url__regex=r".*isc\.sans\.edu.*").mock(return_value=httpx.Response(500))
-    respx.get(url__regex=r".*urlhaus-api\.abuse\.ch.*").mock(
-        return_value=httpx.Response(500)
-    )
+    respx.get(url__regex=r".*netapi\.com.*").mock(return_value=httpx.Response(500))
 
     result = await fetch_cyber_threats(fetcher)
     assert result["feeds_successful"] == 1
@@ -259,6 +271,58 @@ def test_normalizers_reject_wrong_shapes() -> None:
     assert _normalize_cisa_kev([1, 2]) == []
     assert _normalize_sans_isc(None) == []
     assert _normalize_sans_isc({}) == []
-    assert _normalize_urlhaus(None) == []
-    assert _normalize_urlhaus([]) == []
-    assert _normalize_urlhaus({"urls": "not-a-list"}) == []
+    assert _normalize_netapi(None) is None
+    assert _normalize_netapi("") is None
+    assert _normalize_netapi("<html><body>502 Bad Gateway</body></html>") is None
+    assert _normalize_netapi("address,last_seen\n203.0.113.10,x\n") is None
+    # a valid list without rows is not a failure
+    assert _normalize_netapi(_NETAPI_HEADER) == []
+
+
+def test_normalize_netapi_contains_csv_errors() -> None:
+    """A field larger than csv.field_size_limit() raises csv.Error inside the
+    reader. The feed is then rejected instead of the error escaping."""
+    huge = "x" * (csv.field_size_limit() + 10)
+    assert _normalize_netapi(_NETAPI_HEADER + f"203.0.113.10,{huge}\n") is None
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_rejected_netapi_body_is_not_counted_as_a_feed(
+    fetcher: Fetcher, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An HTML page with status 200 is cached like a list, but it must not
+    raise the healthy-feed count."""
+    async def _no_sleep(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio_mod, "sleep", _no_sleep)
+
+    respx.get(url__regex=r".*feodotracker\.abuse\.ch.*").mock(
+        return_value=httpx.Response(200, json=_FEODO)
+    )
+    respx.get(url__regex=r".*cisa\.gov.*").mock(return_value=httpx.Response(500))
+    respx.get(url__regex=r".*isc\.sans\.edu.*").mock(return_value=httpx.Response(500))
+    respx.get(url__regex=r".*netapi\.com.*").mock(
+        return_value=httpx.Response(200, text="<html><body>maintenance</body></html>")
+    )
+
+    result = await fetch_cyber_threats(fetcher)
+    assert result["feeds_successful"] == 1
+    assert all(t["source_feed"] == "feodo-tracker" for t in result["threats"])
+
+
+def test_normalize_netapi_keeps_the_most_recent_addresses() -> None:
+    """The list holds tens of thousands of addresses; only the most recently
+    active ones are merged, newest last_seen first."""
+    rows = "".join(
+        f"192.0.2.{i},2026-08-01T00:00:00Z,2026-08-{i + 1:02d}T00:00:00Z,C,"
+        "env-file-hunting,env-file-hunting,US,64500,EXAMPLE-AS,1\n"
+        for i in range(_NETAPI_MAX_ITEMS + 5)
+    )
+    items = _normalize_netapi(_NETAPI_HEADER + rows)
+    assert len(items) == _NETAPI_MAX_ITEMS
+    assert items[0]["indicator"] == f"192.0.2.{_NETAPI_MAX_ITEMS + 4}"
+    assert items[-1]["indicator"] == "192.0.2.5"
+    assert all(t["severity"] == "high" for t in items)
+    assert all(t["threat"] == "Honeypot attacker (env-file-hunting)" for t in items)

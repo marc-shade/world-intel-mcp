@@ -5,6 +5,16 @@
 Tools 139 -> 160. Collector sources 55 -> 61. New MCP surface: 29 prompts and 3
 resources (none before).
 
+### Changed: NetAPI honeypot feed replaces URLhaus in cyber threats
+- `intel_cyber_threats` read URLhaus through
+  `urlhaus-api.abuse.ch/v1/urls/recent/`, which answers 401 to every request
+  without an abuse.ch Auth-Key, so the feed never returned data. Its slot now
+  holds the NetAPI honeypot IP list (keyless, CC BY 4.0, hourly): the 25
+  most recently active attacker addresses of the last 48 hours as
+  `attack_ip` items (`source_feed: netapi-honeypot`) with attack type,
+  first / last seen, country and AS. Form spam (category D) is `medium`,
+  the rest `high`. Still four feeds attempted.
+
 ### Fixed: failed fetches log no credentials
 - A failed keyed request (FRED, EIA, TomTom and others pass the key as a
   query parameter) logged the full request URL, key included. Fetch

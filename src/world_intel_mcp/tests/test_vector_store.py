@@ -228,6 +228,7 @@ class TestDomainCategories:
 
     def test_granular_source_names(self):
         assert DOMAIN_CATEGORIES["sans-dshield"] == "Cyber Threats"
+        assert DOMAIN_CATEGORIES["cyber_threats"] == "Cyber Threats"
         assert DOMAIN_CATEGORIES["mempool"] == "Cryptocurrency"
         assert DOMAIN_CATEGORIES["who-don"] == "Health"
         assert DOMAIN_CATEGORIES["noaa-swpc"] == "Space Weather"

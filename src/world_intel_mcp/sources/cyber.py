@@ -4,12 +4,14 @@ Aggregates threat data from multiple free public feeds:
 - Feodo Tracker (abuse.ch) -- C2 botnet IPs
 - CISA Known Exploited Vulnerabilities -- actively exploited CVEs
 - SANS ISC DShield -- top attacking IPs
-- URLhaus (abuse.ch) -- malware distribution URLs
+- NetAPI honeypot feed -- IPs that attacked NetAPI's honeypot sensors
 
 No API keys required.
 """
 
 import asyncio
+import csv
+import io
 import logging
 from datetime import datetime, timezone, timedelta
 
@@ -24,7 +26,15 @@ logger = logging.getLogger("world-intel-mcp.sources.cyber")
 _FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.json"
 _CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 _SANS_ISC_URL = "https://isc.sans.edu/api/topips/records/20?json"
-_URLHAUS_RECENT_URL = "https://urlhaus-api.abuse.ch/v1/urls/recent/limit/25/"
+# IPv4 addresses with a real attack on NetAPI's honeypot sensors in the last
+# 48 hours (CC BY 4.0, regenerated hourly, no key). The CSV carries the attack
+# type, first / last seen, country and ASN of every address.
+_NETAPI_HONEYPOT_URL = (
+    "https://netapi.com/api2/?method=compromised&dataset_type=ip&format=csv"
+)
+# The list holds tens of thousands of addresses; only the most recently
+# active ones are merged, so they do not crowd out the other feeds.
+_NETAPI_MAX_ITEMS = 25
 
 # ---------------------------------------------------------------------------
 # Severity ranking for sorting
@@ -141,30 +151,50 @@ def _normalize_sans_isc(data: list | None) -> list[dict]:
     return items
 
 
-def _normalize_urlhaus(data: dict | None) -> list[dict]:
-    """Normalize URLhaus recent malware URLs."""
-    if not data or not isinstance(data, dict):
-        return []
+def _normalize_netapi(text: str | None) -> list[dict] | None:
+    """Normalize the NetAPI honeypot IP list (CSV), most recently active first.
 
-    urls = data.get("urls", [])
-    if not isinstance(urls, list):
-        return []
+    Returns None when the body is not the expected CSV (no ``ip`` column, an
+    HTML page, a field the csv module refuses), so the caller can count the
+    feed as failed. A valid CSV without rows gives an empty list.
+    """
+    if not text or not isinstance(text, str):
+        return None
+
+    try:
+        reader = csv.DictReader(io.StringIO(text))
+        if not reader.fieldnames or "ip" not in reader.fieldnames:
+            return None
+        rows = [row for row in reader if (row.get("ip") or "").strip()]
+    except csv.Error as exc:
+        logger.warning("NetAPI honeypot feed is not valid CSV: %s", exc)
+        return None
+    rows.sort(key=lambda r: r.get("last_seen") or "", reverse=True)
 
     items: list[dict] = []
-    for entry in urls:
-        status = (entry.get("url_status") or "").lower()
-        severity = "high" if status == "online" else "low"
+    for row in rows[:_NETAPI_MAX_ITEMS]:
+        category = (row.get("category") or "").upper()
+        top_threat = row.get("top_threat") or ""
+        asn = row.get("asn") or ""
+        sensors = row.get("sensors") or ""
         items.append({
-            "type": "malware_url",
-            "indicator": entry.get("url", ""),
-            "threat": entry.get("threat", "unknown"),
-            "severity": severity,
-            "source_feed": "urlhaus",
-            "first_seen": entry.get("dateadded", ""),
+            "type": "attack_ip",
+            "indicator": row["ip"].strip(),
+            "threat": (
+                f"Honeypot attacker ({top_threat})" if top_threat else "Honeypot attacker"
+            ),
+            # Category D is form spam; A-C are malware, brute force and exploits.
+            "severity": "medium" if category == "D" else "high",
+            "source_feed": "netapi-honeypot",
+            "first_seen": row.get("first_seen") or "",
             "details": {
-                "url_status": entry.get("url_status"),
-                "tags": entry.get("tags"),
-                "reporter": entry.get("reporter"),
+                "category": category or None,
+                "threats": [t for t in (row.get("threats") or "").split("|") if t],
+                "last_seen": row.get("last_seen"),
+                "country": row.get("country") or None,
+                "as_number": int(asn) if asn.isdigit() else None,
+                "as_name": row.get("as_name") or None,
+                "sensors": int(sensors) if sensors.isdigit() else None,
             },
         })
     return items
@@ -180,9 +210,9 @@ async def fetch_cyber_threats(
 ) -> dict:
     """Aggregate cyber threat intelligence from free public feeds.
 
-    Fetches data from Feodo Tracker, CISA KEV, SANS ISC DShield, and
-    URLhaus in parallel, normalizes into a common format, and returns
-    the top threats sorted by severity and recency.
+    Fetches data from Feodo Tracker, CISA KEV, SANS ISC DShield, and the
+    NetAPI honeypot feed in parallel, normalizes into a common format, and
+    returns the top threats sorted by severity and recency.
 
     Args:
         fetcher: Shared HTTP fetcher with caching and circuit breaking.
@@ -192,7 +222,7 @@ async def fetch_cyber_threats(
         Dict with threats list, counts, breakdowns by type and severity,
         source, and timestamp.
     """
-    feodo_data, cisa_data, sans_data, urlhaus_data = await asyncio.gather(
+    feodo_data, cisa_data, sans_data, netapi_text = await asyncio.gather(
         fetcher.get_json(
             _FEODO_URL,
             source="feodo-tracker",
@@ -211,11 +241,12 @@ async def fetch_cyber_threats(
             cache_key="cyber:sans_isc",
             cache_ttl=1800,
         ),
-        fetcher.get_json(
-            _URLHAUS_RECENT_URL,
-            source="urlhaus",
-            cache_key="cyber:urlhaus",
-            cache_ttl=900,
+        fetcher.get_text(
+            _NETAPI_HONEYPOT_URL,
+            source="netapi-honeypot",
+            cache_key="cyber:netapi_honeypot",
+            cache_ttl=3600,
+            timeout=60,
         ),
     )
 
@@ -240,14 +271,17 @@ async def fetch_cyber_threats(
     else:
         logger.warning("SANS ISC DShield feed returned no data")
 
-    urlhaus_items = _normalize_urlhaus(urlhaus_data)
-    if urlhaus_data is not None:
+    netapi_items = _normalize_netapi(netapi_text)
+    if netapi_items is not None:
         feeds_successful += 1
+    elif netapi_text is None:
+        logger.warning("NetAPI honeypot feed returned no data")
     else:
-        logger.warning("URLhaus feed returned no data")
+        logger.warning("NetAPI honeypot feed returned a body that is not the expected CSV")
+    netapi_items = netapi_items or []
 
     # Merge all threats
-    all_threats = feodo_items + cisa_items + sans_items + urlhaus_items
+    all_threats = feodo_items + cisa_items + sans_items + netapi_items
 
     # Sort by severity (critical first), then by recency (newest first_seen first).
     # Use stable sort: first by date descending, then by severity ascending.
