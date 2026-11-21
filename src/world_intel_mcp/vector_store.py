@@ -94,6 +94,8 @@ DOMAIN_CATEGORIES = {
     "feodo-tracker": "Cyber Threats",
     "cisa-kev": "Cyber Threats",
     "netapi-honeypot": "Cyber Threats",
+    # Collector source name of the combined cyber payload (collector.py SOURCES)
+    "cyber_threats": "Cyber Threats",
     "alternative-me": "Financial Markets",
     "mempool": "Cryptocurrency",
     "hexdb": "Military & Defense",
